@@ -309,7 +309,10 @@ export default function KioskPage() {
         });
 
         // Speak the order
-        await speak(order.text, groupId);
+        await speak(
+          `Order No ${[...String(order.orderNumber)].join(" ")} - ${order.text}`,
+          groupId,
+        );
 
         // Refresh history
         loadHistory();

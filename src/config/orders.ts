@@ -4,12 +4,30 @@ export interface OrderItem {
 }
 
 export const ORDER_LIST: OrderItem[] = [
-  { orderNumber: 1001, text: "Order one zero zero one" },
-  { orderNumber: 1002, text: "Order one zero zero two" },
-  { orderNumber: 1003, text: "Order one zero zero three" },
-  { orderNumber: 1004, text: "Order one zero zero four" },
-  { orderNumber: 1005, text: "Order 1 0 0 5" },
-  { orderNumber: 1006, text: "Order 1 0 0 6" },
+  {
+    orderNumber: 1001,
+    text: "I want a LIGHT GREEN WAFFLE at Zone A and 2 DARK BLUE FRIES at Zone B",
+  },
+  {
+    orderNumber: 1002,
+    text: "I want 2 LIGHT BLUE WAFFLES at Zone C and 3 DARK GREEN FRIES at Zone B",
+  },
+  {
+    orderNumber: 1003,
+    text: "I want 3 PINK PIZZA at Zone A and 5 PURPLE FISH BALLS at Zone C",
+  },
+  {
+    orderNumber: 1004,
+    text: "I want a LIGHT GREEN DUMPLING at Zone C and 2 DARK BLUE WAFFLES at Zone B",
+  },
+  {
+    orderNumber: 1005,
+    text: "I want a LIGHT GREEN PIZZA at Zone D and 2 DARK BLUE WAFFLES at Zone B",
+  },
+  {
+    orderNumber: 1006,
+    text: "I want a LIGHT GREEN LETTUCE at Zone A and 3 RED DUMPLINGS at Zone D",
+  },
   // { orderNumber: 1005, text: "Order one zero zero five" },
   // { orderNumber: 1006, text: "Order one zero zero six" },
   // { orderNumber: 1007, text: "Order one zero zero seven" },
