@@ -81,9 +81,10 @@ function MiniWave({ active, color }: { active: boolean; color: string }) {
           style={{
             height: active ? `${40 + Math.sin(i * 1.2) * 60}%` : "20%",
             background: active ? color : "var(--border)",
-            animation: active
-              ? `wave ${0.5 + i * 0.1}s ease-in-out infinite`
-              : "none",
+            animationName: active ? "wave" : "none",
+            animationDuration: active ? `${0.5 + i * 0.1}s` : "0s",
+            animationTimingFunction: "ease-in-out",
+            animationIterationCount: active ? "infinite" : "0",
             animationDelay: `${i * 0.08}s`,
           }}
         />
