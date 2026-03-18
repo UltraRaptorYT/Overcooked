@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vox — Text to Speech",
-  description: "A beautiful text-to-speech application",
+  title: "Overcooked",
+  description: "Z+O Camp Jun 2026 Overcooked",
 };
 
 export default function RootLayout({
