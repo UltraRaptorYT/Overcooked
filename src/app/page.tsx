@@ -254,7 +254,7 @@ export default function KioskPage() {
       synthRef.current.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.75;
+      utterance.rate = 0.6;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
 
