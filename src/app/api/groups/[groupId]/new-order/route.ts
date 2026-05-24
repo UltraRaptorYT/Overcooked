@@ -59,26 +59,6 @@ export async function POST(_request: Request, context: RouteContext) {
     );
   }
 
-  const { data: activeOrders, error: activeOrdersError } = await supabase
-    .from(T.groupOrders)
-    .select("id, status")
-    .eq("group_id", groupId)
-    .in("status", ["assigned", "cooking", "cooked", "assembling", "served"]);
-
-  if (activeOrdersError) {
-    return NextResponse.json(
-      { error: activeOrdersError.message },
-      { status: 500 },
-    );
-  }
-
-  if (activeOrders && activeOrders.length > 0) {
-    return NextResponse.json(
-      { error: "This group already has an active order" },
-      { status: 409 },
-    );
-  }
-
   const { data: usedOrders, error: usedOrdersError } = await supabase
     .from(T.groupOrders)
     .select("order_template_id")

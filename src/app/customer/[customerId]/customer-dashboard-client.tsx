@@ -79,6 +79,15 @@ function formatReason(reason: string) {
     .join(" ");
 }
 
+function initialsFromFoodName(foodName: string) {
+  return foodName
+    .split(" ")
+    .map((word) => word[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 export function CustomerDashboardClient({
   customerId,
   customerName,
@@ -286,6 +295,20 @@ export function CustomerDashboardClient({
                           key={item.id}
                           className="rounded-2xl bg-white p-3 shadow-sm"
                         >
+                          <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-emerald-100 bg-emerald-50">
+                            {item.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={item.imageUrl}
+                                alt={item.foodName}
+                                className="h-full w-full object-contain p-2"
+                              />
+                            ) : (
+                              <span className="text-2xl font-black text-emerald-700">
+                                {initialsFromFoodName(item.foodName)}
+                              </span>
+                            )}
+                          </div>
                           {item.parentItem && (
                             <p className="mb-1 text-xs font-bold uppercase tracking-wide text-emerald-500">
                               {item.parentItem.replaceAll("_", " ")}

@@ -14,7 +14,7 @@ export default function TextToSpeechPage() {
   const [text, setText] = useState(sampleText);
   const [rate, setRate] = useState(1);
   const [pitch, setPitch] = useState(1);
-  const [volume, setVolume] = useState(1);npm run
+  const [volume, setVolume] = useState(1);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   const directionCounts = useMemo(() => {

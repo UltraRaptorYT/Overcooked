@@ -3,9 +3,21 @@ import customerPageSupabase from "@/lib/supabase";
 import { OVERCOOKED_26_TABLES as CustomerPageT } from "@/lib/overcooked-26/tables";
 
 export default async function CustomerSelectorPage() {
+  const { data: latestGame, error: gameError } = await customerPageSupabase
+    .from(CustomerPageT.games)
+    .select("id, name, created_at")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (gameError || !latestGame) {
+    throw new Error(gameError?.message ?? "No game found");
+  }
+
   const { data: customers, error } = await customerPageSupabase
     .from(CustomerPageT.customers)
     .select("id, name, customer_slot, physical_position")
+    .eq("game_id", latestGame.id)
     .order("customer_slot", { ascending: true });
 
   if (error) {
@@ -20,6 +32,9 @@ export default async function CustomerSelectorPage() {
         </h1>
         <p className="mt-2 text-emerald-900">
           Choose the customer station device.
+        </p>
+        <p className="mt-1 text-sm text-emerald-700">
+          Game: {latestGame.name}
         </p>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
