@@ -42,7 +42,11 @@ type KeypadTarget = "order" | "timer";
 type StartSource = "camera" | "manual";
 
 const {
-  cameraBrightnessThreshold,
+  cameraBrightnessDropTrigger,
+  cameraBrightnessRiseTrigger,
+  cameraCoveredBrightnessThreshold,
+  cameraDebugEnabled,
+  cameraUncoveredBrightnessThreshold,
   defaultBufferSeconds,
   stableBlockMs,
   stableUnblockMs,
@@ -75,6 +79,8 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   const animationFrameRef = useRef<number | null>(null);
   const blockedSinceRef = useRef<number | null>(null);
   const unblockedSinceRef = useRef<number | null>(null);
+  const cameraCoveredRef = useRef(false);
+  const lastBrightnessRef = useRef<number | null>(null);
   const activeSessionRef = useRef<CookingSession | null>(null);
   const startSourceRef = useRef<StartSource>("camera");
   const displayStartedAtBySessionIdRef = useRef<Record<string, number>>({});
@@ -101,6 +107,13 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLive, setIsLive] = useState(false);
+  const [useInlineKeypadOnly, setUseInlineKeypadOnly] = useState(false);
+  const [cameraDebug, setCameraDebug] = useState({
+    brightness: 0,
+    brightnessDelta: 0,
+    isBlocked: false,
+    lastUpdatedAt: 0,
+  });
 
   activeSessionRef.current = activeSession;
   selectedOrderRef.current = selectedOrder;
@@ -404,6 +417,16 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   }, [groupId]);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(pointer: coarse)");
+    const updateInputMode = () => setUseInlineKeypadOnly(mediaQuery.matches);
+
+    updateInputMode();
+    mediaQuery.addEventListener("change", updateInputMode);
+
+    return () => mediaQuery.removeEventListener("change", updateInputMode);
+  }, []);
+
+  useEffect(() => {
     const channel = supabase
       .channel(`cooking-station-${groupId}`)
       .on(
@@ -513,8 +536,48 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           const averageBrightness = Math.round(
             total / (imageData.data.length / 4),
           );
-          const blocked = averageBrightness < cameraBrightnessThreshold;
+          const previousBrightness = lastBrightnessRef.current;
+          const brightnessDelta =
+            previousBrightness == null
+              ? 0
+              : averageBrightness - previousBrightness;
+          const detectedCovered =
+            averageBrightness <= cameraCoveredBrightnessThreshold ||
+            brightnessDelta <= -cameraBrightnessDropTrigger;
+          const detectedUncovered =
+            averageBrightness >= cameraUncoveredBrightnessThreshold ||
+            brightnessDelta >= cameraBrightnessRiseTrigger;
+          let blocked = cameraCoveredRef.current;
+
+          if (detectedCovered && !detectedUncovered) {
+            blocked = true;
+          } else if (detectedUncovered && !detectedCovered) {
+            blocked = false;
+          } else if (detectedCovered && detectedUncovered) {
+            blocked =
+              averageBrightness <
+              (cameraCoveredBrightnessThreshold +
+                cameraUncoveredBrightnessThreshold) /
+                2;
+          }
+
+          cameraCoveredRef.current = blocked;
+          lastBrightnessRef.current = averageBrightness;
           const now = Date.now();
+          if (cameraDebugEnabled) {
+            setCameraDebug((currentDebug) =>
+              currentDebug.brightness === averageBrightness &&
+              currentDebug.brightnessDelta === brightnessDelta &&
+              currentDebug.isBlocked === blocked
+                ? currentDebug
+                : {
+                    brightness: averageBrightness,
+                    brightnessDelta,
+                    isBlocked: blocked,
+                    lastUpdatedAt: now,
+                  },
+            );
+          }
 
           if (blocked) {
             unblockedSinceRef.current = null;
@@ -677,6 +740,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
                 inputMode="numeric"
                 value={orderNoInput}
                 disabled={Boolean(activeSession)}
+                readOnly={useInlineKeypadOnly}
                 onChange={(event) =>
                   selectOrderByNumber(event.target.value.replace(/\D/g, ""))
                 }
@@ -700,6 +764,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
                 inputMode="numeric"
                 value={playerTimerSecondsInput}
                 disabled={Boolean(activeSession)}
+                readOnly={useInlineKeypadOnly}
                 onChange={(event) =>
                   setPlayerTimerSecondsInput(
                     event.target.value.replace(/\D/g, ""),
@@ -808,7 +873,11 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             ref={videoRef}
             playsInline
             muted
-            className="pointer-events-none absolute h-px w-px opacity-0"
+            className={
+              cameraDebugEnabled
+                ? "absolute right-4 top-4 z-20 h-24 w-32 rounded-xl border border-white/50 object-cover shadow-lg"
+                : "pointer-events-none absolute h-px w-px opacity-0"
+            }
           />
           <canvas ref={canvasRef} className="hidden" />
 
@@ -861,6 +930,58 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             </div>
 
             <div className="grid grid-cols-2 content-start gap-2 sm:gap-3 lg:grid-cols-1">
+              {cameraDebugEnabled && (
+                <div className="col-span-2 rounded-xl bg-slate-50 p-3 text-slate-950 ring-1 ring-slate-200 lg:col-span-1">
+                  <p className="text-xs font-bold uppercase text-slate-500">
+                    Brightness Debug
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-lg bg-white p-2">
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Brightness
+                      </p>
+                      <p className="text-xl font-black">
+                        {cameraDebug.brightness}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-2">
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Delta
+                      </p>
+                      <p className="text-xl font-black">
+                        {cameraDebug.brightnessDelta}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-2">
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Camera
+                      </p>
+                      <p className="text-base font-black">
+                        {cameraDebug.isBlocked ? "Covered" : "Open"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-2">
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Covered / Open
+                      </p>
+                      <p className="text-base font-black">
+                        {cameraCoveredBrightnessThreshold} /{" "}
+                        {cameraUncoveredBrightnessThreshold}
+                      </p>
+                    </div>
+                    <div className="col-span-2 rounded-lg bg-white p-2">
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Drop / Rise
+                      </p>
+                      <p className="text-base font-black">
+                        {cameraBrightnessDropTrigger} /{" "}
+                        {cameraBrightnessRiseTrigger}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => startCooking(new Date(), "manual")}

@@ -1,8 +1,12 @@
 export const OVERCOOKED_26_CONFIG = {
   cooking: {
     defaultBufferSeconds: 5,
-    cameraBrightnessThreshold: 45,
-    stableBlockMs: 350,
-    stableUnblockMs: 350,
+    cameraCoveredBrightnessThreshold: 70,
+    cameraUncoveredBrightnessThreshold: 110,
+    cameraBrightnessDropTrigger: 35,
+    cameraBrightnessRiseTrigger: 35,
+    cameraDebugEnabled: true,
+    stableBlockMs: 250,
+    stableUnblockMs: 250,
   },
 } as const;
