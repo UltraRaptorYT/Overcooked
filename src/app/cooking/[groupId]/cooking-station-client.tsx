@@ -101,6 +101,12 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLive, setIsLive] = useState(false);
+  const [cameraDebugEnabled, setCameraDebugEnabled] = useState(false);
+  const [cameraDebug, setCameraDebug] = useState({
+    brightness: 0,
+    isBlocked: false,
+    lastUpdatedAt: 0,
+  });
 
   activeSessionRef.current = activeSession;
   selectedOrderRef.current = selectedOrder;
@@ -515,6 +521,16 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           );
           const blocked = averageBrightness < cameraBrightnessThreshold;
           const now = Date.now();
+          setCameraDebug((currentDebug) =>
+            currentDebug.brightness === averageBrightness &&
+            currentDebug.isBlocked === blocked
+              ? currentDebug
+              : {
+                  brightness: averageBrightness,
+                  isBlocked: blocked,
+                  lastUpdatedAt: now,
+                },
+          );
 
           if (blocked) {
             unblockedSinceRef.current = null;
@@ -808,7 +824,11 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             ref={videoRef}
             playsInline
             muted
-            className="pointer-events-none absolute h-px w-px opacity-0"
+            className={
+              cameraDebugEnabled
+                ? "absolute right-4 top-4 z-20 h-24 w-32 rounded-xl border border-white/50 object-cover shadow-lg"
+                : "pointer-events-none absolute h-px w-px opacity-0"
+            }
           />
           <canvas ref={canvasRef} className="hidden" />
 
@@ -861,6 +881,66 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             </div>
 
             <div className="grid grid-cols-2 content-start gap-2 sm:gap-3 lg:grid-cols-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setCameraDebugEnabled((currentValue) => !currentValue)
+                }
+                className="col-span-2 min-h-12 rounded-xl bg-slate-900 px-5 font-bold text-white transition hover:bg-slate-700 lg:col-span-1"
+              >
+                {cameraDebugEnabled ? "Hide Camera Debug" : "Camera Debug"}
+              </button>
+
+              {cameraDebugEnabled && (
+                <div className="col-span-2 rounded-xl bg-slate-50 p-3 text-slate-950 ring-1 ring-slate-200 lg:col-span-1">
+                  <p className="text-xs font-bold uppercase text-slate-500">
+                    Brightness Debug
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-lg bg-white p-2">
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Brightness
+                      </p>
+                      <p className="text-xl font-black">
+                        {cameraDebug.brightness}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-2">
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Threshold
+                      </p>
+                      <p className="text-xl font-black">
+                        {cameraBrightnessThreshold}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-2">
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Camera
+                      </p>
+                      <p className="text-base font-black">
+                        {cameraDebug.isBlocked ? "Covered" : "Open"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-2">
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Updated
+                      </p>
+                      <p className="text-base font-black">
+                        {cameraDebug.lastUpdatedAt
+                          ? `${Math.max(
+                              0,
+                              Math.round(
+                                (Date.now() - cameraDebug.lastUpdatedAt) /
+                                  1000,
+                              ),
+                            )}s ago`
+                          : "--"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => startCooking(new Date(), "manual")}
