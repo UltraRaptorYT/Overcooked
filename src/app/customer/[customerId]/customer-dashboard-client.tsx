@@ -16,6 +16,11 @@ type LookupData = {
     belongsToThisCustomer: boolean;
     requiredTotalCookTimeSeconds: number;
   };
+  correctCustomer: {
+    id: string;
+    name: string;
+    customerSlot: number;
+  };
   groupOrder: {
     id: string;
     status: string;
@@ -72,6 +77,17 @@ const REJECT_REASONS = [
   "messy_or_unclear",
 ] as const;
 
+const FOOD_IMAGE_FILTERS: Record<string, string> = {
+  red: "sepia(0.9) saturate(4) hue-rotate(315deg) brightness(0.95)",
+  blue: "sepia(0.8) saturate(3.8) hue-rotate(175deg) brightness(0.9)",
+  green: "sepia(0.8) saturate(3.5) hue-rotate(70deg) brightness(0.9)",
+  yellow: "sepia(0.9) saturate(3.5) hue-rotate(5deg) brightness(1.05)",
+  purple: "sepia(0.75) saturate(3.2) hue-rotate(230deg) brightness(0.9)",
+  pink: "sepia(0.75) saturate(2.8) hue-rotate(300deg) brightness(1.05)",
+  brown: "sepia(0.9) saturate(1.6) hue-rotate(345deg) brightness(0.75)",
+  orange: "sepia(0.9) saturate(3.5) hue-rotate(335deg) brightness(1)",
+};
+
 function formatReason(reason: string) {
   return reason
     .split("_")
@@ -86,6 +102,19 @@ function initialsFromFoodName(foodName: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function getFoodImageFilter(colour: string) {
+  return FOOD_IMAGE_FILTERS[colour.toLowerCase()] ?? "none";
+}
+
+function getCookingFailReason(data: LookupData | null) {
+  const result = data?.cookingSession?.result;
+
+  if (result === "overcooked") return "overcooked";
+  if (result === "undercooked") return "undercooked";
+  if (data && data.order.requiredTotalCookTimeSeconds > 0) return "not_cooked";
+  return null;
 }
 
 export function CustomerDashboardClient({
@@ -115,6 +144,13 @@ export function CustomerDashboardClient({
 
     return grouped;
   }, [lookupData]);
+  const cookingCanPass =
+    !lookupData ||
+    lookupData.order.requiredTotalCookTimeSeconds === 0 ||
+    lookupData.cookingSession?.result === "not_required" ||
+    lookupData.cookingSession?.result === "correct";
+  const cookingHasFailed = Boolean(lookupData) && !cookingCanPass;
+  const cookingFailReason = getCookingFailReason(lookupData);
 
   async function handleLookup() {
     const cleanedOrderNo = orderNo.trim();
@@ -140,6 +176,10 @@ export function CustomerDashboardClient({
       }
 
       setLookupData(data);
+      const nextCookingFailReason = getCookingFailReason(data);
+      if (nextCookingFailReason) {
+        setSelectedRejectReason(nextCookingFailReason);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong",
@@ -183,9 +223,10 @@ export function CustomerDashboardClient({
 
       const points = data.servedOrder.points_delta;
       const tokens = data.servedOrder.red_tokens_delta;
+      const finalDecision = data.servedOrder.decision;
 
       setMessage(
-        decision === "approved"
+        finalDecision === "approved"
           ? `Approved. +${points} points, +${tokens} red token.`
           : `Rejected. ${points} points, +${tokens} red token.`,
       );
@@ -276,6 +317,20 @@ export function CustomerDashboardClient({
               </div>
             </div>
 
+            {!lookupData.order.belongsToThisCustomer && (
+              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-900">
+                <p className="text-sm font-bold uppercase tracking-wide text-red-700">
+                  Correct Customer
+                </p>
+                <p className="mt-1 text-2xl font-black">
+                  Customer {lookupData.correctCustomer.customerSlot}
+                </p>
+                <p className="text-sm font-semibold">
+                  {lookupData.correctCustomer.name}
+                </p>
+              </div>
+            )}
+
             <div className="mt-6 grid gap-4 md:grid-cols-4">
               {(["A", "B", "C", "D"] as const).map((zone) => (
                 <div
@@ -302,6 +357,9 @@ export function CustomerDashboardClient({
                                 src={item.imageUrl}
                                 alt={item.foodName}
                                 className="h-full w-full object-contain p-2"
+                                style={{
+                                  filter: getFoodImageFilter(item.colour),
+                                }}
                               />
                             ) : (
                               <span className="text-2xl font-black text-emerald-700">
@@ -340,22 +398,45 @@ export function CustomerDashboardClient({
                 {lookupData.order.requiredTotalCookTimeSeconds}s
               </p>
               <p className="mt-1 text-amber-800">
-                Current cooking result:{" "}
-                {lookupData.cookingSession?.result ?? "not recorded yet"}
+                Cooked for:{" "}
+                {lookupData.cookingSession?.actual_seconds != null
+                  ? `${lookupData.cookingSession.actual_seconds}s`
+                  : "not recorded yet"}
               </p>
+              {cookingHasFailed && (
+                <p className="mt-3 rounded-2xl bg-red-100 px-4 py-3 font-black text-red-800">
+                  Order fail
+                  {cookingFailReason
+                    ? `: ${formatReason(cookingFailReason)}`
+                    : ""}
+                </p>
+              )}
             </div>
 
             <div className="mt-6 grid gap-3 md:grid-cols-3">
               {lookupData.order.belongsToThisCustomer ? (
                 <>
+                  {cookingCanPass ? (
                   <button
                     type="button"
                     onClick={() => judgeOrder("approved")}
-                    disabled={isLoading}
-                    className="rounded-2xl bg-emerald-600 px-6 py-5 text-xl font-black text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                    disabled={isLoading || !cookingCanPass}
+                    className="rounded-2xl bg-emerald-600 px-6 py-5 text-xl font-black text-white transition hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-600"
                   >
                     ✅ Approve +10
                   </button>
+
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="rounded-2xl bg-slate-300 px-6 py-5 text-xl font-black text-slate-600"
+                    >
+                      {cookingFailReason
+                        ? formatReason(cookingFailReason)
+                        : "Order Fail"}
+                    </button>
+                  )}
 
                   <div className="rounded-2xl border border-red-200 bg-red-50 p-3 md:col-span-2">
                     <select
@@ -374,7 +455,10 @@ export function CustomerDashboardClient({
                     <button
                       type="button"
                       onClick={() =>
-                        judgeOrder("rejected", selectedRejectReason)
+                        judgeOrder(
+                          "rejected",
+                          cookingFailReason ?? selectedRejectReason,
+                        )
                       }
                       disabled={isLoading}
                       className="w-full rounded-2xl bg-red-600 px-6 py-4 text-lg font-black text-white transition hover:bg-red-700 disabled:opacity-50"

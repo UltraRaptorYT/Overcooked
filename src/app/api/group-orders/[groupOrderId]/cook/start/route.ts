@@ -1,5 +1,6 @@
 import { NextResponse as StartCookNextResponse } from "next/server";
 import startCookSupabase from "@/lib/supabase";
+import { OVERCOOKED_26_CONFIG } from "@/lib/overcooked-26/config";
 import { OVERCOOKED_26_TABLES as StartCookT } from "@/lib/overcooked-26/tables";
 
 type StartCookContext = {
@@ -11,15 +12,34 @@ type StartCookContext = {
 type StartCookBody = {
   bufferSeconds?: number;
   groupId?: string;
+  detectedAt?: string;
   playerTimerSeconds?: number;
 };
+
+const STARTABLE_ORDER_STATUSES = ["assigned", "assembling"] as const;
+
+function getTrustedClientTime(value: string | undefined, fallback: Date) {
+  if (!value) return fallback;
+
+  const parsed = new Date(value);
+  const timestamp = parsed.getTime();
+
+  if (!Number.isFinite(timestamp)) return fallback;
+
+  const fallbackTimestamp = fallback.getTime();
+  const tooFarInFuture = timestamp > fallbackTimestamp + 2000;
+  const tooFarInPast = timestamp < fallbackTimestamp - 30000;
+
+  return tooFarInFuture || tooFarInPast ? fallback : parsed;
+}
 
 export async function POST(request: Request, context: StartCookContext) {
   const { groupOrderId } = await context.params;
   const body = (await request.json().catch(() => ({}))) as StartCookBody;
   const groupId = body.groupId;
   const playerTimerSeconds = body.playerTimerSeconds;
-  const bufferSeconds = body.bufferSeconds ?? 5;
+  const bufferSeconds =
+    body.bufferSeconds ?? OVERCOOKED_26_CONFIG.cooking.defaultBufferSeconds;
 
   if (
     typeof playerTimerSeconds !== "number" ||
@@ -66,9 +86,9 @@ export async function POST(request: Request, context: StartCookContext) {
     );
   }
 
-  if (!["assigned", "cooked", "assembling"].includes(groupOrder.status)) {
+  if (!STARTABLE_ORDER_STATUSES.includes(groupOrder.status)) {
     return StartCookNextResponse.json(
-      { error: `Cannot start cooking while order is ${groupOrder.status}` },
+      { error: "This order has already been cooked" },
       { status: 400 },
     );
   }
@@ -101,7 +121,10 @@ export async function POST(request: Request, context: StartCookContext) {
     );
   }
 
-  const startedAt = new Date().toISOString();
+  const startedAt = getTrustedClientTime(
+    body.detectedAt,
+    new Date(),
+  ).toISOString();
   const requiredSeconds = orderTemplate.required_total_cook_time_seconds;
 
   const { data: session, error: sessionError } = await startCookSupabase

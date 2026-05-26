@@ -8,6 +8,25 @@ type StopCookContext = {
   }>;
 };
 
+type StopCookBody = {
+  detectedAt?: string;
+};
+
+function getTrustedClientTime(value: string | undefined, fallback: Date) {
+  if (!value) return fallback;
+
+  const parsed = new Date(value);
+  const timestamp = parsed.getTime();
+
+  if (!Number.isFinite(timestamp)) return fallback;
+
+  const fallbackTimestamp = fallback.getTime();
+  const tooFarInFuture = timestamp > fallbackTimestamp + 2000;
+  const tooFarInPast = timestamp < fallbackTimestamp - 30000;
+
+  return tooFarInFuture || tooFarInPast ? fallback : parsed;
+}
+
 function getCookResult(
   actualSeconds: number,
   requiredSeconds: number,
@@ -19,8 +38,9 @@ function getCookResult(
   return "overcooked";
 }
 
-export async function POST(_request: Request, context: StopCookContext) {
+export async function POST(request: Request, context: StopCookContext) {
   const { sessionId } = await context.params;
+  const body = (await request.json().catch(() => ({}))) as StopCookBody;
 
   if (!sessionId) {
     return StopCookNextResponse.json(
@@ -51,7 +71,7 @@ export async function POST(_request: Request, context: StopCookContext) {
     );
   }
 
-  const removedAt = new Date();
+  const removedAt = getTrustedClientTime(body.detectedAt, new Date());
   const startedAt = new Date(session.started_at);
   const actualSeconds = Math.max(
     0,

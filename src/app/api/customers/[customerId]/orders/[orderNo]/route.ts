@@ -9,6 +9,38 @@ type LookupContext = {
   }>;
 };
 
+async function getCustomer(customerId: string) {
+  const customerNo = Number(customerId);
+  const isCustomerSlot = Number.isInteger(customerNo) && customerNo > 0;
+
+  const customerQuery = supabase
+    .from(T.customers)
+    .select("id, game_id, name, customer_slot");
+
+  if (!isCustomerSlot) {
+    return customerQuery.eq("id", customerId).single();
+  }
+
+  const { data: latestGame, error: gameError } = await supabase
+    .from(T.games)
+    .select("id")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (gameError || !latestGame) {
+    return {
+      data: null,
+      error: gameError ?? new Error("No game found"),
+    };
+  }
+
+  return customerQuery
+    .eq("game_id", latestGame.id)
+    .eq("customer_slot", customerNo)
+    .single();
+}
+
 export async function GET(_request: Request, context: LookupContext) {
   const { customerId, orderNo } = await context.params;
 
@@ -21,11 +53,9 @@ export async function GET(_request: Request, context: LookupContext) {
     );
   }
 
-  const { data: customer, error: customerError } = await supabase
-    .from(T.customers)
-    .select("id, game_id, name, customer_slot")
-    .eq("id", customerId)
-    .single();
+  const { data: customer, error: customerError } = await getCustomer(
+    customerId,
+  );
 
   if (customerError || !customer) {
     return NextResponse.json({ error: "Customer not found" }, { status: 404 });
@@ -143,6 +173,20 @@ export async function GET(_request: Request, context: LookupContext) {
   const belongsToThisCustomer =
     orderTemplate.customer_slot === customer.customer_slot;
 
+  const { data: correctCustomer, error: correctCustomerError } = await supabase
+    .from(T.customers)
+    .select("id, name, customer_slot")
+    .eq("game_id", customer.game_id)
+    .eq("customer_slot", orderTemplate.customer_slot)
+    .single();
+
+  if (correctCustomerError || !correctCustomer) {
+    return NextResponse.json(
+      { error: "Correct customer not found" },
+      { status: 404 },
+    );
+  }
+
   return NextResponse.json({
     customer: {
       id: customer.id,
@@ -157,6 +201,11 @@ export async function GET(_request: Request, context: LookupContext) {
       belongsToThisCustomer,
       requiredTotalCookTimeSeconds:
         orderTemplate.required_total_cook_time_seconds,
+    },
+    correctCustomer: {
+      id: correctCustomer.id,
+      name: correctCustomer.name,
+      customerSlot: correctCustomer.customer_slot,
     },
     groupOrder: {
       id: groupOrder.id,

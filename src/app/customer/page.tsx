@@ -1,8 +1,19 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import customerPageSupabase from "@/lib/supabase";
 import { OVERCOOKED_26_TABLES as CustomerPageT } from "@/lib/overcooked-26/tables";
+import { CustomerDashboardClient } from "./[customerId]/customer-dashboard-client";
 
-export default async function CustomerSelectorPage() {
+type CustomerSelectorPageProps = {
+  searchParams: Promise<{
+    customerId?: string;
+  }>;
+};
+
+export default async function CustomerSelectorPage({
+  searchParams,
+}: CustomerSelectorPageProps) {
+  const { customerId } = await searchParams;
   const { data: latestGame, error: gameError } = await customerPageSupabase
     .from(CustomerPageT.games)
     .select("id, name, created_at")
@@ -24,6 +35,30 @@ export default async function CustomerSelectorPage() {
     throw new Error(error.message);
   }
 
+  if (customerId) {
+    const customerNo = Number(customerId);
+
+    if (!Number.isInteger(customerNo) || customerNo <= 0) {
+      notFound();
+    }
+
+    const customer = (customers ?? []).find(
+      (candidate) => candidate.customer_slot === customerNo,
+    );
+
+    if (!customer) {
+      notFound();
+    }
+
+    return (
+      <CustomerDashboardClient
+        customerId={customer.id}
+        customerName={customer.name}
+        customerSlot={customer.customer_slot}
+      />
+    );
+  }
+
   return (
     <main className="min-h-screen bg-emerald-50 p-6">
       <div className="mx-auto max-w-3xl">
@@ -41,7 +76,7 @@ export default async function CustomerSelectorPage() {
           {(customers ?? []).map((customer) => (
             <Link
               key={customer.id}
-              href={`/customer/${customer.id}`}
+              href={`/customer?customerId=${customer.customer_slot}`}
               className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm transition hover:scale-[1.01] hover:shadow-md"
             >
               <div className="text-xl font-semibold text-emerald-950">

@@ -182,6 +182,36 @@ export function DisplayClient() {
     }
   }
 
+  async function clearExistingOrders() {
+    const confirmed = window.confirm(
+      "Clear all existing orders and reset group scores?",
+    );
+
+    if (!confirmed) return;
+
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch("/api/display/clear-orders", {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to clear orders");
+      }
+
+      await loadDisplay();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Something went wrong",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   useEffect(() => {
     void loadDisplay();
   }, []);
@@ -317,6 +347,14 @@ export function DisplayClient() {
                 className="rounded-xl bg-white px-4 py-3 font-black text-slate-950 disabled:opacity-50"
               >
                 Reset
+              </button>
+              <button
+                type="button"
+                onClick={clearExistingOrders}
+                disabled={isSaving}
+                className="col-span-2 rounded-xl bg-red-600 px-4 py-3 font-black text-white disabled:opacity-50"
+              >
+                Clear Orders
               </button>
             </div>
 

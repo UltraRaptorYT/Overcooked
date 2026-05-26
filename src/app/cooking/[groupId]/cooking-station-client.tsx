@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import supabase from "@/lib/supabase";
+import { OVERCOOKED_26_CONFIG } from "@/lib/overcooked-26/config";
 import { OVERCOOKED_26_TABLES as T } from "@/lib/overcooked-26/tables";
 
 type CookingLookupData = {
@@ -38,12 +39,16 @@ type Props = {
 };
 
 type KeypadTarget = "order" | "timer";
+type StartSource = "camera" | "manual";
 
-const STABLE_BLOCK_MS = 800;
-const STABLE_UNBLOCK_MS = 800;
-const DEFAULT_BUFFER_SECONDS = 5;
-const BRIGHTNESS_THRESHOLD = 45;
+const {
+  cameraBrightnessThreshold,
+  defaultBufferSeconds,
+  stableBlockMs,
+  stableUnblockMs,
+} = OVERCOOKED_26_CONFIG.cooking;
 const KEYPAD_VALUES = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
+const STARTABLE_ORDER_STATUSES = new Set(["assigned", "assembling"]);
 
 function formatDecimalSeconds(seconds: number) {
   const sign = seconds < 0 ? "-" : "";
@@ -56,7 +61,11 @@ function formatDecimalSeconds(seconds: number) {
 function getTimerStatus(remainingSeconds: number, bufferRemainingSeconds: number) {
   if (remainingSeconds > 0) return "Cooking...";
   if (bufferRemainingSeconds > 0) return "Buffer time";
-  return "Past buffer";
+  return "Time's up";
+}
+
+function isOrderStartable(order: CookingLookupData | null) {
+  return Boolean(order && STARTABLE_ORDER_STATUSES.has(order.groupOrder.status));
 }
 
 export function CookingStationClient({ groupId, groupName }: Props) {
@@ -67,6 +76,8 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   const blockedSinceRef = useRef<number | null>(null);
   const unblockedSinceRef = useRef<number | null>(null);
   const activeSessionRef = useRef<CookingSession | null>(null);
+  const startSourceRef = useRef<StartSource>("camera");
+  const displayStartedAtBySessionIdRef = useRef<Record<string, number>>({});
   const selectedOrderRef = useRef<CookingLookupData | null>(null);
   const orderNoInputRef = useRef("");
   const playerTimerSecondsRef = useRef(0);
@@ -115,9 +126,10 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     : countdownTotal;
   const bufferRemainingSeconds = activeSession
     ? countdownTotal + activeSession.buffer_seconds - elapsedSeconds
-    : DEFAULT_BUFFER_SECONDS;
+    : defaultBufferSeconds;
   const isInBufferTime =
     Boolean(activeSession) && remainingSeconds <= 0 && bufferRemainingSeconds > 0;
+  const canStartCooking = !activeSession && isOrderStartable(selectedOrder);
 
   function selectOrder(order: CookingLookupData | null) {
     setSelectedOrder(order);
@@ -137,6 +149,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     setLatestSession(nextOrder?.latestCookingSession ?? null);
 
     if (nextOrder) {
+      setKeypadTarget("timer");
       console.log("[Cooking test] Selected order", {
         orderNo: nextOrder.order.orderNo,
         groupOrderId: nextOrder.groupOrder.id,
@@ -150,6 +163,8 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   }
 
   function appendKeypadValue(value: string) {
+    if (activeSessionRef.current) return;
+
     if (keypadTarget === "order") {
       selectOrderByNumber(`${orderNoInput}${value}`);
       return;
@@ -161,6 +176,8 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   }
 
   function backspaceKeypadValue() {
+    if (activeSessionRef.current) return;
+
     if (keypadTarget === "order") {
       selectOrderByNumber(orderNoInput.slice(0, -1));
       return;
@@ -170,12 +187,19 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   }
 
   function clearKeypadValue() {
-    if (keypadTarget === "order") {
-      selectOrderByNumber("");
+    if (activeSessionRef.current) {
+      setErrorMessage("Stop cooking before clearing the station");
       return;
     }
 
+    setSelectedOrder(null);
+    setActiveSession(null);
+    setLatestSession(null);
+    setOrderNoInput("");
     setPlayerTimerSecondsInput("");
+    setKeypadTarget("order");
+    setMessage("Station cleared. Enter the next order number and timer.");
+    setErrorMessage(null);
   }
 
   async function loadGroupOrders({ quiet = false } = {}) {
@@ -183,9 +207,6 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     if (!quiet) {
       setMessage(null);
     }
-    setSelectedOrder(null);
-    setActiveSession(null);
-    setLatestSession(null);
 
     try {
       const response = await fetch(
@@ -242,12 +263,20 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     }
   }
 
-  async function startCooking() {
+  async function startCooking(
+    detectedAt = new Date(),
+    startSource: StartSource = "manual",
+  ) {
     const order = selectedOrderRef.current;
     if (isStartingRef.current) return;
 
     if (!order) {
       setErrorMessage("Enter a valid active order number first");
+      return;
+    }
+
+    if (!isOrderStartable(order)) {
+      setErrorMessage("This order has already been cooked");
       return;
     }
 
@@ -271,7 +300,8 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            bufferSeconds: DEFAULT_BUFFER_SECONDS,
+            bufferSeconds: defaultBufferSeconds,
+            detectedAt: detectedAt.toISOString(),
             groupId,
             playerTimerSeconds: timerSeconds,
           }),
@@ -284,6 +314,8 @@ export function CookingStationClient({ groupId, groupName }: Props) {
         throw new Error(data.error ?? "Failed to start cooking");
       }
 
+      startSourceRef.current = startSource;
+      displayStartedAtBySessionIdRef.current[data.session.id] = Date.now();
       setActiveSession(data.session);
       setLatestSession(data.session);
       setOrders((currentOrders) =>
@@ -312,7 +344,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     }
   }
 
-  async function stopCooking() {
+  async function stopCooking(detectedAt = new Date()) {
     const session = activeSessionRef.current;
     if (!session || isStoppingRef.current) return;
 
@@ -323,6 +355,12 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     try {
       const response = await fetch(`/api/cooking-sessions/${session.id}/stop`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          detectedAt: detectedAt.toISOString(),
+        }),
       });
 
       const data = await response.json();
@@ -332,6 +370,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
       }
 
       setActiveSession(null);
+      startSourceRef.current = "camera";
       setLatestSession(data.session);
       setOrders((currentOrders) =>
         currentOrders.map((currentOrder) =>
@@ -349,10 +388,6 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             : currentOrder,
         ),
       );
-      setSelectedOrder(null);
-      setOrderNoInput("");
-      setPlayerTimerSecondsInput("");
-      setKeypadTarget("order");
       setMessage("Cooking stopped and saved.");
     } catch (error) {
       setErrorMessage(
@@ -478,7 +513,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           const averageBrightness = Math.round(
             total / (imageData.data.length / 4),
           );
-          const blocked = averageBrightness < BRIGHTNESS_THRESHOLD;
+          const blocked = averageBrightness < cameraBrightnessThreshold;
           const now = Date.now();
 
           if (blocked) {
@@ -488,9 +523,10 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             if (
               !activeSessionRef.current &&
               selectedOrderRef.current &&
-              now - blockedSinceRef.current >= STABLE_BLOCK_MS
+              isOrderStartable(selectedOrderRef.current) &&
+              now - blockedSinceRef.current >= stableBlockMs
             ) {
-              startCooking();
+              startCooking(new Date(blockedSinceRef.current), "camera");
             }
           } else {
             blockedSinceRef.current = null;
@@ -498,9 +534,10 @@ export function CookingStationClient({ groupId, groupName }: Props) {
 
             if (
               activeSessionRef.current &&
-              now - unblockedSinceRef.current >= STABLE_UNBLOCK_MS
+              startSourceRef.current === "camera" &&
+              now - unblockedSinceRef.current >= stableUnblockMs
             ) {
-              stopCooking();
+              stopCooking(new Date(unblockedSinceRef.current));
             }
           }
         }
@@ -527,7 +564,9 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     }
 
     const interval = window.setInterval(() => {
-      const startedAt = new Date(activeSession.started_at).getTime();
+      const startedAt =
+        displayStartedAtBySessionIdRef.current[activeSession.id] ??
+        new Date(activeSession.started_at).getTime();
       const elapsed = Math.max(0, (Date.now() - startedAt) / 1000);
       setElapsedSeconds(elapsed);
     }, 50);
@@ -536,7 +575,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   }, [activeSession]);
 
   return (
-    <main className="h-[100dvh] overflow-hidden bg-orange-50 p-3 sm:p-5">
+    <main className="min-h-[100dvh] bg-orange-50 p-2 sm:p-5 lg:h-[100dvh] lg:overflow-hidden">
       <style jsx>{`
         @keyframes flame-rise {
           0% {
@@ -601,52 +640,66 @@ export function CookingStationClient({ groupId, groupName }: Props) {
         }
       `}</style>
 
-      <div className="mx-auto grid h-full max-w-5xl grid-rows-[auto_1fr] gap-3 sm:gap-4">
-        <section className="rounded-2xl bg-white p-3 shadow-sm sm:rounded-3xl sm:p-5">
+      <div className="mx-auto grid min-h-[calc(100dvh-1rem)] max-w-5xl grid-rows-[minmax(0,1fr)_auto] gap-2 sm:gap-4 lg:h-full lg:min-h-0">
+        <section className="order-2 rounded-2xl bg-white p-2 shadow-sm sm:rounded-3xl sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-medium uppercase text-orange-600 sm:text-sm">
                 Cooking Station
               </p>
-              <h1 className="mt-1 text-2xl font-black text-orange-950 sm:text-4xl">
+              <h1 className="text-xl font-black text-orange-950 sm:mt-1 sm:text-4xl">
                 {groupName}
               </h1>
             </div>
 
             <div className="rounded-xl bg-orange-50 px-3 py-2 text-right sm:rounded-2xl sm:px-4 sm:py-3">
               <p className="text-[11px] font-bold uppercase text-orange-700">
-                Orders
+                Live
               </p>
-              <p className="text-sm font-black text-orange-950">
+              <p className="text-xs font-black text-orange-950 sm:text-sm">
                 {isLive ? "Live" : "Connecting"}
               </p>
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4">
-            <label className="rounded-xl border border-orange-100 bg-orange-50 p-3 sm:rounded-2xl sm:p-4">
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-4">
+            <label
+              className={`rounded-xl border p-2 sm:rounded-2xl sm:p-4 ${
+                keypadTarget === "order"
+                  ? "border-orange-400 bg-orange-50"
+                  : "border-orange-100 bg-orange-50"
+              }`}
+            >
               <span className="text-xs font-bold text-orange-900 sm:text-sm">
-                1. Enter order number
+                Order no.
               </span>
               <input
                 inputMode="numeric"
                 value={orderNoInput}
+                disabled={Boolean(activeSession)}
                 onChange={(event) =>
                   selectOrderByNumber(event.target.value.replace(/\D/g, ""))
                 }
                 onFocus={() => setKeypadTarget("order")}
                 placeholder="Order no."
-                className="mt-1 w-full rounded-xl border border-orange-200 px-3 py-2 text-2xl font-black text-orange-950 outline-none transition focus:border-orange-500 sm:mt-2 sm:px-4 sm:py-4 sm:text-3xl"
+                className="mt-1 h-12 w-full rounded-xl border border-orange-200 px-3 text-2xl font-black text-orange-950 outline-none transition focus:border-orange-500 disabled:bg-white/60 disabled:text-orange-950 sm:mt-2 sm:h-16 sm:px-4 sm:text-3xl"
               />
             </label>
 
-            <label className="rounded-xl border border-orange-100 bg-orange-50 p-3 sm:rounded-2xl sm:p-4">
+            <label
+              className={`rounded-xl border p-2 sm:rounded-2xl sm:p-4 ${
+                keypadTarget === "timer"
+                  ? "border-orange-400 bg-orange-50"
+                  : "border-orange-100 bg-orange-50"
+              }`}
+            >
               <span className="text-xs font-bold text-orange-900 sm:text-sm">
-                2. Enter timer seconds
+                Timer seconds
               </span>
               <input
                 inputMode="numeric"
                 value={playerTimerSecondsInput}
+                disabled={Boolean(activeSession)}
                 onChange={(event) =>
                   setPlayerTimerSecondsInput(
                     event.target.value.replace(/\D/g, ""),
@@ -654,19 +707,20 @@ export function CookingStationClient({ groupId, groupName }: Props) {
                 }
                 onFocus={() => setKeypadTarget("timer")}
                 placeholder="Seconds"
-                className="mt-1 w-full rounded-xl border border-orange-200 px-3 py-2 text-2xl font-black text-orange-950 outline-none transition focus:border-orange-500 sm:mt-2 sm:px-4 sm:py-4 sm:text-3xl"
+                className="mt-1 h-12 w-full rounded-xl border border-orange-200 px-3 text-2xl font-black text-orange-950 outline-none transition focus:border-orange-500 disabled:bg-white/60 disabled:text-orange-950 sm:mt-2 sm:h-16 sm:px-4 sm:text-3xl"
               />
             </label>
           </div>
 
-          <div className="mt-3 grid grid-cols-[1fr_auto] gap-3">
-            <div className="grid grid-cols-6 gap-2">
+          <div className="mt-2 grid grid-cols-[1fr_auto] gap-2 sm:mt-3 sm:gap-3">
+            <div className="grid grid-cols-4 gap-2">
               {KEYPAD_VALUES.map((value) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => appendKeypadValue(value)}
-                  className="rounded-xl bg-orange-100 py-2 text-lg font-black text-orange-950 transition hover:bg-orange-200"
+                  disabled={Boolean(activeSession)}
+                  className="min-h-11 rounded-xl bg-orange-100 text-lg font-black text-orange-950 transition hover:bg-orange-200 sm:min-h-12"
                 >
                   {value}
                 </button>
@@ -674,49 +728,63 @@ export function CookingStationClient({ groupId, groupName }: Props) {
               <button
                 type="button"
                 onClick={() => appendKeypadValue("0")}
-                className="rounded-xl bg-orange-100 py-2 text-lg font-black text-orange-950 transition hover:bg-orange-200"
+                disabled={Boolean(activeSession)}
+                className="min-h-11 rounded-xl bg-orange-100 text-lg font-black text-orange-950 transition hover:bg-orange-200 sm:min-h-12"
               >
                 0
               </button>
               <button
                 type="button"
                 onClick={backspaceKeypadValue}
-                className="rounded-xl bg-slate-100 py-2 text-lg font-black text-slate-950 transition hover:bg-slate-200"
+                disabled={Boolean(activeSession)}
+                className="min-h-11 rounded-xl bg-slate-100 text-base font-black text-slate-950 transition hover:bg-slate-200 sm:min-h-12 sm:text-lg"
               >
                 Del
+              </button>
+              <button
+                type="button"
+                onClick={clearKeypadValue}
+                className="min-h-11 rounded-xl bg-slate-900 text-base font-black text-white transition hover:bg-slate-700 sm:min-h-12 sm:text-lg"
+              >
+                Clear
               </button>
             </div>
             <button
               type="button"
-              onClick={clearKeypadValue}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-700"
+              onClick={() =>
+                keypadTarget === "order"
+                  ? setKeypadTarget("timer")
+                  : setKeypadTarget("order")
+              }
+              disabled={Boolean(activeSession)}
+              className="min-h-11 rounded-xl bg-white px-3 text-xs font-black text-orange-900 ring-1 ring-orange-200 transition hover:bg-orange-50 sm:min-h-12 sm:px-4 sm:text-sm"
             >
-              Clear
+              {keypadTarget === "order" ? "Timer" : "Order"}
             </button>
           </div>
 
-          <div className="mt-3 grid grid-cols-3 gap-2 sm:mt-4 sm:gap-3">
-            <div className="rounded-xl bg-slate-50 p-3 sm:rounded-2xl sm:p-4">
+          <div className="mt-2 grid grid-cols-3 gap-2 sm:mt-4 sm:gap-3">
+            <div className="rounded-xl bg-slate-50 p-2 sm:rounded-2xl sm:p-4">
               <p className="text-[11px] font-bold text-slate-700 sm:text-sm">
                 Orders
               </p>
-              <p className="text-2xl font-black text-slate-950 sm:text-3xl">
+              <p className="text-xl font-black text-slate-950 sm:text-3xl">
                 {orders.length}
               </p>
             </div>
-            <div className="rounded-xl bg-slate-50 p-3 sm:rounded-2xl sm:p-4">
+            <div className="rounded-xl bg-slate-50 p-2 sm:rounded-2xl sm:p-4">
               <p className="text-[11px] font-bold text-slate-700 sm:text-sm">
                 Selected
               </p>
-              <p className="text-2xl font-black text-slate-950 sm:text-3xl">
+              <p className="text-xl font-black text-slate-950 sm:text-3xl">
                 {selectedOrder ? `#${selectedOrder.order.orderNo}` : "--"}
               </p>
             </div>
-            <div className="rounded-xl bg-slate-50 p-3 sm:rounded-2xl sm:p-4">
+            <div className="rounded-xl bg-slate-50 p-2 sm:rounded-2xl sm:p-4">
               <p className="text-[11px] font-bold text-slate-700 sm:text-sm">
                 Timer
               </p>
-              <p className="text-2xl font-black text-slate-950 sm:text-3xl">
+              <p className="text-xl font-black text-slate-950 sm:text-3xl">
                 {formatDecimalSeconds(remainingSeconds)}
               </p>
             </div>
@@ -735,7 +803,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           )}
         </section>
 
-        <section className="min-h-0 rounded-2xl bg-white p-3 shadow-sm sm:rounded-3xl sm:p-5">
+        <section className="order-1 min-h-0 rounded-2xl bg-white p-2 shadow-sm sm:rounded-3xl sm:p-5">
           <video
             ref={videoRef}
             playsInline
@@ -744,7 +812,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           />
           <canvas ref={canvasRef} className="hidden" />
 
-          <div className="grid h-full min-h-0 grid-rows-[1fr_auto] gap-3 lg:grid-cols-[1fr_280px] lg:grid-rows-1 lg:gap-6">
+          <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2 sm:gap-3 lg:grid-cols-[1fr_280px] lg:grid-rows-1 lg:gap-6">
             <div
               className={`relative min-h-0 overflow-hidden rounded-2xl border sm:rounded-3xl ${
                 activeSession
@@ -759,14 +827,14 @@ export function CookingStationClient({ groupId, groupName }: Props) {
                   <div className="flame flame-a" />
                   <div className="flame flame-b" />
                   <div className="flame flame-c" />
-                  <div className="relative z-10 flex h-full min-h-[220px] flex-col items-center justify-center p-5 text-center text-white sm:min-h-[360px] sm:p-8">
+                  <div className="relative z-10 flex h-full min-h-[170px] flex-col items-center justify-center p-4 text-center text-white sm:min-h-[360px] sm:p-8">
                     <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-200 sm:text-sm">
                       Cooking
                     </p>
-                    <p className="mt-2 text-6xl font-black sm:mt-4 sm:text-7xl">
+                    <p className="mt-1 text-[clamp(3rem,16vw,4.8rem)] font-black sm:mt-4 sm:text-7xl">
                       {formatDecimalSeconds(remainingSeconds)}
                     </p>
-                    <p className="mt-2 text-xl font-bold sm:mt-3 sm:text-2xl">
+                    <p className="mt-1 text-lg font-bold sm:mt-3 sm:text-2xl">
                       {isInBufferTime
                         ? `Buffer: ${formatDecimalSeconds(bufferRemainingSeconds)}`
                         : timerStatus}
@@ -774,35 +842,38 @@ export function CookingStationClient({ groupId, groupName }: Props) {
                   </div>
                 </>
               ) : (
-                <div className="flex h-full min-h-[220px] flex-col items-center justify-center p-5 text-center sm:min-h-[360px] sm:p-8">
+                <div className="flex h-full min-h-[170px] flex-col items-center justify-center p-4 text-center sm:min-h-[360px] sm:p-8">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-600 sm:text-sm">
                     Ready
                   </p>
-                  <p className="mt-2 text-3xl font-black text-orange-950 sm:mt-4 sm:text-5xl">
-                    Cover camera to start
+                  <p className="mt-1 text-2xl font-black text-orange-950 sm:mt-4 sm:text-5xl">
+                    {selectedOrder && !canStartCooking
+                      ? "Order already cooked"
+                      : "Cover camera to start"}
                   </p>
-                  <p className="mt-2 max-w-md text-sm text-orange-800 sm:mt-3 sm:text-base">
-                    Enter the order number and timer first. Uncover the camera
-                    when cooking is done.
+                  <p className="mt-1 max-w-md text-xs text-orange-800 sm:mt-3 sm:text-base">
+                    {selectedOrder && !canStartCooking
+                      ? "Press Clear, then enter another order."
+                      : "Enter the order number and timer first. Uncover the camera when cooking is done."}
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-2 content-start gap-3 lg:grid-cols-1">
+            <div className="grid grid-cols-2 content-start gap-2 sm:gap-3 lg:grid-cols-1">
               <button
                 type="button"
-                onClick={startCooking}
-                disabled={Boolean(activeSession)}
-                className="rounded-xl bg-orange-600 px-5 py-3 font-bold text-white transition hover:bg-orange-700 disabled:opacity-50 sm:rounded-2xl sm:py-4"
+                onClick={() => startCooking(new Date(), "manual")}
+                disabled={!canStartCooking}
+                className="min-h-12 rounded-xl bg-orange-600 px-5 font-bold text-white transition hover:bg-orange-700 disabled:opacity-50 sm:rounded-2xl sm:py-4"
               >
                 Start
               </button>
               <button
                 type="button"
-                onClick={stopCooking}
+                onClick={() => stopCooking()}
                 disabled={!activeSession}
-                className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition hover:bg-red-700 disabled:opacity-50 sm:rounded-2xl sm:py-4"
+                className="min-h-12 rounded-xl bg-red-600 px-5 font-bold text-white transition hover:bg-red-700 disabled:opacity-50 sm:rounded-2xl sm:py-4"
               >
                 Stop
               </button>
