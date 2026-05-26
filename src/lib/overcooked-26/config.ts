@@ -5,7 +5,7 @@ export const OVERCOOKED_26_CONFIG = {
     cameraUncoveredBrightnessThreshold: 110,
     cameraBrightnessDropTrigger: 35,
     cameraBrightnessRiseTrigger: 35,
-    cameraDebugEnabled: true,
+    cameraDebugEnabled: false,
     stableBlockMs: 250,
     stableUnblockMs: 250,
   },
