@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import supabase from "@/lib/supabase";
 import { OVERCOOKED_26_TABLES as T } from "@/lib/overcooked-26/tables";
 
@@ -69,6 +69,22 @@ type DisplayState = {
   groups: DisplayGroup[];
 };
 
+type CookingStartedPayload = {
+  groupId: string;
+  groupOrderId: string;
+  groupOrder?: {
+    id: string;
+    status: string;
+    assignedAt: string;
+  };
+  order?: {
+    id?: string;
+    orderNo?: string;
+    difficulty?: RoundMode;
+  };
+  session: CookingSession;
+};
+
 function formatSeconds(seconds: number) {
   const safeSeconds = Math.max(0, Math.floor(seconds));
   const mins = Math.floor(safeSeconds / 60);
@@ -102,6 +118,50 @@ function getSessionTiming(session: CookingSession | null, now: number) {
     elapsed,
     phase: remaining > 0 ? "Cooking" : bufferRemaining > 0 ? "Buffer" : "Past buffer",
     remaining,
+  };
+}
+
+function applyCookingStartedToGroup(
+  group: DisplayGroup,
+  payload: CookingStartedPayload,
+) {
+  const existingOrder = group.orders.find(
+    (order) => order.groupOrder.id === payload.groupOrderId,
+  );
+
+  if (!existingOrder && payload.groupOrder && payload.order) {
+    return {
+      ...group,
+      orders: [
+        {
+          groupOrder: {
+            ...payload.groupOrder,
+            status: "cooking",
+          },
+          order: payload.order,
+          activeCookingSession: payload.session,
+          latestCookingSession: payload.session,
+        },
+        ...group.orders,
+      ],
+    };
+  }
+
+  return {
+    ...group,
+    orders: group.orders.map((order) =>
+      order.groupOrder.id !== payload.groupOrderId
+        ? order
+        : {
+            ...order,
+            groupOrder: {
+              ...order.groupOrder,
+              status: "cooking",
+            },
+            activeCookingSession: payload.session,
+            latestCookingSession: payload.session,
+          },
+    ),
   };
 }
 
@@ -182,6 +242,22 @@ export function DisplayClient() {
     }
   }
 
+  const applyCookingStarted = useCallback((payload: CookingStartedPayload) => {
+    setDisplayState((currentState) => {
+      if (!currentState) return currentState;
+
+      return {
+        ...currentState,
+        groups: currentState.groups.map((group) =>
+          group.id === payload.groupId
+            ? applyCookingStartedToGroup(group, payload)
+            : group,
+        ),
+      };
+    });
+    setNow(Date.now());
+  }, []);
+
   async function clearExistingOrders() {
     const confirmed = window.confirm(
       "Clear all existing orders and reset group scores?",
@@ -225,6 +301,14 @@ export function DisplayClient() {
     const channel = supabase
       .channel("display-board")
       .on(
+        "broadcast",
+        { event: "cooking-started" },
+        ({ payload }) => {
+          applyCookingStarted(payload as CookingStartedPayload);
+          void loadDisplay();
+        },
+      )
+      .on(
         "postgres_changes",
         { event: "*", schema: "public", table: T.games },
         () => void loadDisplay(),
@@ -250,7 +334,7 @@ export function DisplayClient() {
       setIsLive(false);
       void supabase.removeChannel(channel);
     };
-  }, []);
+  }, [applyCookingStarted]);
 
   const durationSeconds = Math.max(60, Math.floor(Number(durationMinutes) * 60));
 

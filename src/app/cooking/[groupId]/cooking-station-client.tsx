@@ -33,6 +33,14 @@ type CookingSession = {
   result: "pending" | "undercooked" | "correct" | "overcooked" | "not_required";
 };
 
+type CookingStartedPayload = {
+  groupId: string;
+  groupOrderId: string;
+  groupOrder: CookingLookupData["groupOrder"];
+  order: CookingLookupData["order"];
+  session: CookingSession;
+};
+
 type Props = {
   groupId: string;
   groupName: string;
@@ -83,6 +91,9 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   const lastBrightnessRef = useRef<number | null>(null);
   const activeSessionRef = useRef<CookingSession | null>(null);
   const startSourceRef = useRef<StartSource>("camera");
+  const displayChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
+    null,
+  );
   const displayStartedAtBySessionIdRef = useRef<Record<string, number>>({});
   const selectedOrderRef = useRef<CookingLookupData | null>(null);
   const orderNoInputRef = useRef("");
@@ -303,6 +314,37 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     isStartingRef.current = true;
     setErrorMessage(null);
     setMessage(null);
+    const optimisticSession: CookingSession = {
+      id: `pending-${order.groupOrder.id}`,
+      buffer_seconds: defaultBufferSeconds,
+      player_timer_seconds: timerSeconds,
+      started_at: detectedAt.toISOString(),
+      removed_at: null,
+      actual_seconds: null,
+      result: "pending",
+    };
+    const previousActiveSession = activeSessionRef.current;
+    const previousLatestSession = latestSession;
+    startSourceRef.current = startSource;
+    displayStartedAtBySessionIdRef.current[optimisticSession.id] = Date.now();
+    setActiveSession(optimisticSession);
+    setLatestSession(optimisticSession);
+    setOrders((currentOrders) =>
+      currentOrders.map((currentOrder) =>
+        currentOrder.groupOrder.id === order.groupOrder.id
+          ? {
+              ...currentOrder,
+              groupOrder: {
+                ...currentOrder.groupOrder,
+                status: "cooking",
+                cookingStartedAt: optimisticSession.started_at,
+              },
+              activeCookingSession: optimisticSession,
+              latestCookingSession: optimisticSession,
+            }
+          : currentOrder,
+      ),
+    );
 
     try {
       const response = await fetch(
@@ -347,8 +389,41 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             : currentOrder,
         ),
       );
+      void displayChannelRef.current?.send({
+        type: "broadcast",
+        event: "cooking-started",
+        payload: {
+          groupId,
+          groupOrderId: order.groupOrder.id,
+          groupOrder: {
+            ...order.groupOrder,
+            status: "cooking",
+            cookingStartedAt: data.session.started_at,
+          },
+          order: order.order,
+          session: data.session,
+        } satisfies CookingStartedPayload,
+      });
       setMessage(null);
     } catch (error) {
+      setActiveSession(previousActiveSession);
+      setLatestSession(previousLatestSession);
+      setOrders((currentOrders) =>
+        currentOrders.map((currentOrder) =>
+          currentOrder.groupOrder.id === order.groupOrder.id
+            ? {
+                ...currentOrder,
+                groupOrder: {
+                  ...currentOrder.groupOrder,
+                  status: order.groupOrder.status,
+                  cookingStartedAt: order.groupOrder.cookingStartedAt,
+                },
+                activeCookingSession: previousActiveSession,
+                latestCookingSession: previousLatestSession,
+              }
+            : currentOrder,
+        ),
+      );
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong",
       );
@@ -424,6 +499,19 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     mediaQuery.addEventListener("change", updateInputMode);
 
     return () => mediaQuery.removeEventListener("change", updateInputMode);
+  }, []);
+
+  useEffect(() => {
+    const displayChannel = supabase.channel("display-board");
+    displayChannelRef.current = displayChannel;
+    displayChannel.subscribe();
+
+    return () => {
+      if (displayChannelRef.current === displayChannel) {
+        displayChannelRef.current = null;
+      }
+      void supabase.removeChannel(displayChannel);
+    };
   }, []);
 
   useEffect(() => {
@@ -869,16 +957,14 @@ export function CookingStationClient({ groupId, groupName }: Props) {
         </section>
 
         <section className="order-1 min-h-0 rounded-2xl bg-white p-2 shadow-sm sm:rounded-3xl sm:p-5">
-          <video
-            ref={videoRef}
-            playsInline
-            muted
-            className={
-              cameraDebugEnabled
-                ? "absolute right-4 top-4 z-20 h-24 w-32 rounded-xl border border-white/50 object-cover shadow-lg"
-                : "pointer-events-none absolute h-px w-px opacity-0"
-            }
-          />
+          {!cameraDebugEnabled && (
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              className="pointer-events-none absolute h-px w-px opacity-0"
+            />
+          )}
           <canvas ref={canvasRef} className="hidden" />
 
           <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2 sm:gap-3 lg:grid-cols-[1fr_280px] lg:grid-rows-1 lg:gap-6">
@@ -932,6 +1018,12 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             <div className="grid grid-cols-2 content-start gap-2 sm:gap-3 lg:grid-cols-1">
               {cameraDebugEnabled && (
                 <div className="col-span-2 rounded-xl bg-slate-50 p-3 text-slate-950 ring-1 ring-slate-200 lg:col-span-1">
+                  <video
+                    ref={videoRef}
+                    playsInline
+                    muted
+                    className="mb-3 aspect-video w-full rounded-lg border border-white object-cover shadow-sm"
+                  />
                   <p className="text-xs font-bold uppercase text-slate-500">
                     Brightness Debug
                   </p>

@@ -93,45 +93,48 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
     }
   }, [groupId, groupName]);
 
-  const handleReplay = useCallback(async (groupOrderId: string) => {
-    setIsLoading(true);
-    setErrorMessage(null);
+  const handleReplay = useCallback(
+    async (groupOrderId: string) => {
+      setIsLoading(true);
+      setErrorMessage(null);
 
-    try {
-      const response = await fetch(
-        `/api/group-orders/${groupOrderId}/replay`,
-        { method: "POST" },
-      );
+      try {
+        const response = await fetch(
+          `/api/group-orders/${groupOrderId}/replay`,
+          { method: "POST" },
+        );
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error ?? "Failed to replay order");
+        if (!response.ok) {
+          throw new Error(data.error ?? "Failed to replay order");
+        }
+
+        console.log("[Order test] Replay order audio text", {
+          groupId,
+          groupName,
+          groupOrderId,
+          spokenText: data.spokenText,
+        });
+
+        setOrders((currentOrders) =>
+          currentOrders.map((order) =>
+            order.groupOrderId === groupOrderId
+              ? { ...order, spokenText: data.spokenText }
+              : order,
+          ),
+        );
+        speak(data.spokenText);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Something went wrong",
+        );
+      } finally {
+        setIsLoading(false);
       }
-
-      console.log("[Order test] Replay order audio text", {
-        groupId,
-        groupName,
-        groupOrderId,
-        spokenText: data.spokenText,
-      });
-
-      setOrders((currentOrders) =>
-        currentOrders.map((order) =>
-          order.groupOrderId === groupOrderId
-            ? { ...order, spokenText: data.spokenText }
-            : order,
-        ),
-      );
-      speak(data.spokenText);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Something went wrong",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [groupId, groupName]);
+    },
+    [groupId, groupName],
+  );
 
   useEffect(() => {
     void loadOrders();
@@ -202,17 +205,21 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
               <p className="px-1 text-left text-sm font-bold text-orange-900">
                 Received Orders
               </p>
-              {orders.map((order, index) => (
-                <button
-                  key={order.groupOrderId}
-                  type="button"
-                  onClick={() => handleReplay(order.groupOrderId)}
-                  disabled={isLoading}
-                  className="rounded-xl border border-orange-200 bg-white px-4 py-3 text-left font-semibold text-orange-950 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Replay Order {index + 1}
-                </button>
-              ))}
+              {orders.map((order, index) => {
+                const chronologicalOrderNumber = orders.length - index;
+
+                return (
+                  <button
+                    key={order.groupOrderId}
+                    type="button"
+                    onClick={() => handleReplay(order.groupOrderId)}
+                    disabled={isLoading}
+                    className="rounded-xl border border-orange-200 bg-white px-4 py-3 text-left font-semibold text-orange-950 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Replay Order {chronologicalOrderNumber}
+                  </button>
+                );
+              })}
             </div>
           )}
 
