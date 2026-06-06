@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import supabase from "@/lib/supabase";
 import { OVERCOOKED_26_TABLES as T } from "@/lib/overcooked-26/tables";
 
@@ -85,6 +85,14 @@ type CookingStartedPayload = {
   session: CookingSession;
 };
 
+type AlarmAudioContext = AudioContext & {
+  webkitAudioContext?: never;
+};
+
+type WindowWithWebAudio = Window & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
 function formatSeconds(seconds: number) {
   const safeSeconds = Math.max(0, Math.floor(seconds));
   const mins = Math.floor(safeSeconds / 60);
@@ -165,6 +173,68 @@ function applyCookingStartedToGroup(
   };
 }
 
+let alarmAudioContext: AlarmAudioContext | null = null;
+
+function getAlarmAudioContext() {
+  if (typeof window === "undefined") return null;
+
+  const audioWindow = window as WindowWithWebAudio;
+  const AudioContextConstructor =
+    window.AudioContext ?? audioWindow.webkitAudioContext;
+
+  if (!AudioContextConstructor) return null;
+
+  alarmAudioContext ??= new AudioContextConstructor();
+  return alarmAudioContext;
+}
+
+async function unlockAlarmSound() {
+  const context = getAlarmAudioContext();
+  if (!context) return;
+
+  try {
+    await context.resume();
+  } catch {
+    // Browsers may reject this before a user gesture; the next gesture retries it.
+  }
+}
+
+async function playAlarmSound() {
+  const context = getAlarmAudioContext();
+  if (!context) return;
+
+  try {
+    await context.resume();
+
+    const startTime = context.currentTime + 0.02;
+    const beeps = [
+      { frequency: 880, offset: 0 },
+      { frequency: 660, offset: 0.25 },
+      { frequency: 880, offset: 0.5 },
+    ];
+
+    for (const beep of beeps) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const beepStart = startTime + beep.offset;
+      const beepEnd = beepStart + 0.16;
+
+      oscillator.type = "square";
+      oscillator.frequency.setValueAtTime(beep.frequency, beepStart);
+      gain.gain.setValueAtTime(0.0001, beepStart);
+      gain.gain.exponentialRampToValueAtTime(0.25, beepStart + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, beepEnd);
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(beepStart);
+      oscillator.stop(beepEnd + 0.02);
+    }
+  } catch {
+    // If autoplay policy blocks the alarm, keep the display running.
+  }
+}
+
 export function DisplayClient() {
   const [displayState, setDisplayState] = useState<DisplayState | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -172,6 +242,8 @@ export function DisplayClient() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLive, setIsLive] = useState(false);
+  const previousMatchRemainingRef = useRef<number | null>(null);
+  const previousSessionBufferRemainingRef = useRef<Record<string, number>>({});
 
   const currentRound = displayState?.currentRound ?? null;
   const matchRemaining = useMemo(() => {
@@ -296,6 +368,58 @@ export function DisplayClient() {
     const interval = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const unlock = () => {
+      void unlockAlarmSound();
+    };
+
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  useEffect(() => {
+    const previousMatchRemaining = previousMatchRemainingRef.current;
+    if (
+      currentRound?.status === "playing" &&
+      previousMatchRemaining !== null &&
+      previousMatchRemaining > 0 &&
+      matchRemaining === 0
+    ) {
+      void playAlarmSound();
+    }
+    previousMatchRemainingRef.current = matchRemaining;
+
+    const previousSessionRemaining = previousSessionBufferRemainingRef.current;
+    const nextSessionRemaining: Record<string, number> = {};
+
+    for (const group of displayState?.groups ?? []) {
+      for (const order of group.orders) {
+        const session = order.activeCookingSession;
+        if (!session) continue;
+
+        const timing = getSessionTiming(session, now);
+        const previousRemaining = previousSessionRemaining[session.id];
+
+        if (
+          previousRemaining !== undefined &&
+          previousRemaining > 0 &&
+          timing.bufferRemaining === 0
+        ) {
+          void playAlarmSound();
+        }
+
+        nextSessionRemaining[session.id] = timing.bufferRemaining;
+      }
+    }
+
+    previousSessionBufferRemainingRef.current = nextSessionRemaining;
+  }, [currentRound?.status, displayState?.groups, matchRemaining, now]);
 
   useEffect(() => {
     const channel = supabase
