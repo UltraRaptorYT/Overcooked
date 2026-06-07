@@ -6,7 +6,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 1,
     spokenText:
-      "Order number 6 8 4 2. I want a burger at zone B with a brown top burger bun, yellow cheese, red tomato, green lettuce, and a brown bottom burger bun. I also want a purple heart candy at zone D.",
+      "Order number 6 8 4 2. I want a burger at zone \"B\" with a brown top burger bun, yellow cheese, red tomato, green lettuce, and a brown bottom burger bun. I also want a purple heart candy at zone \"D\".",
     items: [
       {
         zone: "B",
@@ -51,7 +51,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 2,
     spokenText:
-      "Order number 3 1 9 7. I want a breakfast plate at zone A with orange waffles, pink bacon, and yellow fries. I also want a blue round popsicle at zone C.",
+      "Order number 3 1 9 7. I want a breakfast plate at zone \"A\" with orange waffles, pink bacon, and yellow fries. I also want a blue round popsicle at zone \"C\".",
     items: [
       {
         zone: "A",
@@ -82,7 +82,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 3,
     spokenText:
-      "Order number 9 0 7 4. I want a noodle bowl at zone C with green noodles, red mushroom, yellow corn, and purple carrot. I also want a pink star candy at zone A.",
+      "Order number 9 0 7 4. I want a noodle bowl at zone \"C\" with green noodles, red mushroom, yellow corn, and purple carrot. I also want a pink star candy at zone \"A\".",
     items: [
       {
         zone: "C",
@@ -120,7 +120,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 4,
     spokenText:
-      "Order number 2 4 6 1. I want a hotdog set at zone D with a brown round bun, orange hotdog, green lettuce, and red tomato. I also want blue fries at zone B.",
+      "Order number 2 4 6 1. I want a hotdog set at zone \"D\" with a brown round bun, orange hotdog, green lettuce, and red tomato. I also want blue fries at zone \"B\".",
     items: [
       {
         zone: "D",
@@ -158,7 +158,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 5,
     spokenText:
-      "Order number 7 5 8 0. I want a bread basket at zone A with brown baguette, yellow bread slices, and orange braided bread loaf. Put purple flower candy at zone D.",
+      "Order number 7 5 8 0. I want a bread basket at zone \"A\" with brown baguette, yellow bread slices, and orange braided bread loaf. Put purple flower candy at zone \"D\".",
     items: [
       {
         zone: "A",
@@ -189,7 +189,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 6,
     spokenText:
-      "Order number 5 3 1 6. I want a veggie plate at zone B with green capsicum, orange carrot, yellow corn, and blue cauliflower. I also want a red rectangular candy at zone C.",
+      "Order number 5 3 1 6. I want a veggie plate at zone \"B\" with green capsicum, orange carrot, yellow corn, and blue cauliflower. I also want a red rectangular candy at zone \"C\".",
     items: [
       {
         zone: "B",
@@ -227,7 +227,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 1,
     spokenText:
-      "Order number 1 9 0 8. I want a burger at zone A with a purple top burger bun, pink cheese, blue tomato, yellow lettuce, and a purple bottom burger bun. I also want green corn at zone C.",
+      "Order number 1 9 0 8. I want a burger at zone \"A\" with a purple top burger bun, pink cheese, blue tomato, yellow lettuce, and a purple bottom burger bun. I also want green corn at zone \"C\".",
     items: [
       {
         zone: "A",
@@ -272,7 +272,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 2,
     spokenText:
-      "Order number 4 7 2 5. I want a snack plate at zone D with red dumpling, yellow fries, and brown bacon. I also want green round candy at zone A and pink strawberry at zone B.",
+      "Order number 4 7 2 5. I want a snack plate at zone \"D\" with red dumpling, yellow fries, and brown bacon. I also want green round candy at zone \"A\" and pink strawberry at zone \"B\".",
     items: [
       {
         zone: "D",
@@ -304,7 +304,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 3,
     spokenText:
-      "Order number 8 6 5 3. I want a pastry plate at zone B with pink cinnamon roll, brown small loaf, and yellow pineapple bun. I also want blue heart candy at zone D.",
+      "Order number 8 6 5 3. I want a pastry plate at zone \"B\" with pink cinnamon roll, brown small loaf, and yellow pineapple bun. I also want blue heart candy at zone \"D\".",
     items: [
       {
         zone: "B",
@@ -335,7 +335,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 4,
     spokenText:
-      "Order number 6 0 4 9. I want noodles at zone C with orange noodles, green capsicum, blue mushroom, and red bacon. I also want purple triangle popsicle at zone A.",
+      "Order number 6 0 4 9. I want noodles at zone \"C\" with orange noodles, green capsicum, blue mushroom, and red bacon. I also want purple triangle popsicle at zone \"A\".",
     items: [
       {
         zone: "C",
@@ -373,7 +373,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 5,
     spokenText:
-      "Order number 3 1 7 0. I want a four zone order. Zone A has blue waffles. Zone B has green cheese. Zone C has yellow carrot. Zone D has red star candy.",
+      "Order number 3 1 7 0. I want a four zone order. Zone \"A\" has blue waffles. Zone \"B\" has green cheese. Zone \"C\" has yellow carrot. Zone \"D\" has red star candy.",
     items: [
       { zone: "A", foodItemId: "waffles", colour: "blue" },
       { zone: "B", foodItemId: "cheese", colour: "green" },
@@ -386,7 +386,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 6,
     spokenText:
-      "Order number 9 2 8 6. I want a sandwich at zone A with brown bread slices, yellow cheese, red tomato, green lettuce, and brown bread slices. I also want pink round candy at zone D.",
+      "Order number 9 2 8 6. I want a sandwich at zone \"A\" with brown bread slices, yellow cheese, red tomato, green lettuce, and brown bread slices. I also want pink round candy at zone \"D\".",
     items: [
       {
         zone: "A",
@@ -431,7 +431,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 1,
     spokenText:
-      "Order number 4 5 0 2. I want a burger at zone D with orange top burger bun, blue cheese, green tomato, purple lettuce, pink bacon, and orange bottom burger bun.",
+      "Order number 4 5 0 2. I want a burger at zone \"D\" with orange top burger bun, blue cheese, green tomato, purple lettuce, pink bacon, and orange bottom burger bun.",
     items: [
       {
         zone: "D",
@@ -482,7 +482,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 2,
     spokenText:
-      "Order number 7 8 3 4. I want a cooked trio at zone B with purple dumpling, yellow hotdog, and green fries. Put blue flower candy at zone C and red jellybean bear at zone A.",
+      "Order number 7 8 3 4. I want a cooked trio at zone \"B\" with purple dumpling, yellow hotdog, and green fries. Put blue flower candy at zone \"C\" and red jellybean bear at zone \"A\".",
     items: [
       {
         zone: "B",
@@ -514,7 +514,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 3,
     spokenText:
-      "Order number 1 2 6 5. I want a veggie noodle plate at zone A with blue noodles, yellow cauliflower, green capsicum, and orange mushroom. I also want purple rectangular candy at zone B.",
+      "Order number 1 2 6 5. I want a veggie noodle plate at zone \"A\" with blue noodles, yellow cauliflower, green capsicum, and orange mushroom. I also want purple rectangular candy at zone \"B\".",
     items: [
       {
         zone: "A",
@@ -552,7 +552,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 4,
     spokenText:
-      "Order number 5 9 0 7. I want dessert at zone C with pink waffles, brown cinnamon roll, and yellow pineapple bun. I also want green round popsicle at zone D.",
+      "Order number 5 9 0 7. I want dessert at zone \"C\" with pink waffles, brown cinnamon roll, and yellow pineapple bun. I also want green round popsicle at zone \"D\".",
     items: [
       {
         zone: "C",
@@ -583,7 +583,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 5,
     spokenText:
-      "Order number 8 7 2 1. I want a hotdog plate at zone A with red hotdog, brown round bun, yellow fries, and green lettuce. I also want blue heart candy at zone C.",
+      "Order number 8 7 2 1. I want a hotdog plate at zone \"A\" with red hotdog, brown round bun, yellow fries, and green lettuce. I also want blue heart candy at zone \"C\".",
     items: [
       {
         zone: "A",
@@ -621,7 +621,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 6,
     spokenText:
-      "Order number 3 0 4 6. I want a mixed plate at zone D with purple bacon, orange carrot, blue corn, and yellow mushroom. Put red spiral candy at zone B.",
+      "Order number 3 0 4 6. I want a mixed plate at zone \"D\" with purple bacon, orange carrot, blue corn, and yellow mushroom. Put red spiral candy at zone \"B\".",
     items: [
       {
         zone: "D",
@@ -659,7 +659,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 1,
     spokenText:
-      "Order number 6 4 1 8. I want a four zone order. Zone A has yellow baguette. Zone B has purple tomato. Zone C has green fries. Zone D has pink flower candy.",
+      "Order number 6 4 1 8. I want a four zone order. Zone \"A\" has yellow baguette. Zone \"B\" has purple tomato. Zone \"C\" has green fries. Zone \"D\" has pink flower candy.",
     items: [
       { zone: "A", foodItemId: "baguette", colour: "yellow" },
       { zone: "B", foodItemId: "tomato", colour: "purple" },
@@ -672,7 +672,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 2,
     spokenText:
-      "Order number 2 5 9 3. I want a burger at zone C with blue top burger bun, red cheese, yellow tomato, green lettuce, brown bacon, and blue bottom burger bun. Also put orange star candy at zone A.",
+      "Order number 2 5 9 3. I want a burger at zone \"C\" with blue top burger bun, red cheese, yellow tomato, green lettuce, brown bacon, and blue bottom burger bun. Also put orange star candy at zone \"A\".",
     items: [
       {
         zone: "C",
@@ -724,7 +724,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 3,
     spokenText:
-      "Order number 7 0 8 2. I want a bread and veggie plate at zone B with brown small loaf, green cauliflower, yellow corn, and red capsicum. Put blue round candy at zone D.",
+      "Order number 7 0 8 2. I want a bread and veggie plate at zone \"B\" with brown small loaf, green cauliflower, yellow corn, and red capsicum. Put blue round candy at zone \"D\".",
     items: [
       {
         zone: "B",
@@ -762,7 +762,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 4,
     spokenText:
-      "Order number 4 3 5 9. I want a breakfast set at zone A with yellow waffles, pink bacon, orange fries, and brown bread slices. I also want purple jellybean bear at zone C.",
+      "Order number 4 3 5 9. I want a breakfast set at zone \"A\" with yellow waffles, pink bacon, orange fries, and brown bread slices. I also want purple jellybean bear at zone \"C\".",
     items: [
       {
         zone: "A",
@@ -800,7 +800,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 5,
     spokenText:
-      "Order number 9 1 6 4. I want a noodle bowl at zone D with red noodles, yellow dumpling, green mushroom, and purple carrot. I also want blue rectangular candy at zone B.",
+      "Order number 9 1 6 4. I want a noodle bowl at zone \"D\" with red noodles, yellow dumpling, green mushroom, and purple carrot. I also want blue rectangular candy at zone \"B\".",
     items: [
       {
         zone: "D",
@@ -838,7 +838,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 6,
     spokenText:
-      "Order number 1 2 0 6. I want a colour mix at zone C with pink round bun, green cheese, orange tomato, and blue lettuce. Put yellow heart candy at zone A.",
+      "Order number 1 2 0 6. I want a colour mix at zone \"C\" with pink round bun, green cheese, orange tomato, and blue lettuce. Put yellow heart candy at zone \"A\".",
     items: [
       {
         zone: "C",
@@ -876,7 +876,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 1,
     spokenText:
-      "Order number 6 9 7 5. I want a party plate at zone B with purple hotdog, yellow fries, green corn, and red cauliflower. I also want orange triangle popsicle at zone D.",
+      "Order number 6 9 7 5. I want a party plate at zone \"B\" with purple hotdog, yellow fries, green corn, and red cauliflower. I also want orange triangle popsicle at zone \"D\".",
     items: [
       {
         zone: "B",
@@ -914,7 +914,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 2,
     spokenText:
-      "Order number 3 8 1 4. I want a pastry stack at zone A with brown cinnamon roll, pink pineapple bun, and yellow braided bread loaf. Put green spiral candy at zone C and blue strawberry at zone D.",
+      "Order number 3 8 1 4. I want a pastry stack at zone \"A\" with brown cinnamon roll, pink pineapple bun, and yellow braided bread loaf. Put green spiral candy at zone \"C\" and blue strawberry at zone \"D\".",
     items: [
       {
         zone: "A",
@@ -946,7 +946,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 3,
     spokenText:
-      "Order number 8 5 0 9. I want a burger at zone D with green top burger bun, orange cheese, pink tomato, purple lettuce, yellow bacon, and green bottom burger bun.",
+      "Order number 8 5 0 9. I want a burger at zone \"D\" with green top burger bun, orange cheese, pink tomato, purple lettuce, yellow bacon, and green bottom burger bun.",
     items: [
       {
         zone: "D",
@@ -997,7 +997,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 4,
     spokenText:
-      "Order number 2 7 3 0. I want a four zone order. Zone A has purple dumpling. Zone B has yellow star candy. Zone C has brown baguette. Zone D has red mushroom.",
+      "Order number 2 7 3 0. I want a four zone order. Zone \"A\" has purple dumpling. Zone \"B\" has yellow star candy. Zone \"C\" has brown baguette. Zone \"D\" has red mushroom.",
     items: [
       { zone: "A", foodItemId: "dumpling", colour: "purple" },
       { zone: "B", foodItemId: "star_candy", colour: "yellow" },
@@ -1010,7 +1010,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 5,
     spokenText:
-      "Order number 5 6 9 8. I want a sandwich at zone C with blue bread slices, pink cheese, red tomato, yellow lettuce, and blue bread slices. I also want green fries at zone A.",
+      "Order number 5 6 9 8. I want a sandwich at zone \"C\" with blue bread slices, pink cheese, red tomato, yellow lettuce, and blue bread slices. I also want green fries at zone \"A\".",
     items: [
       {
         zone: "C",
@@ -1055,7 +1055,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 6,
     spokenText:
-      "Order number 7 4 2 0. I want a snack board at zone B with orange bacon, purple fries, yellow corn, and green capsicum. Put pink flower candy at zone D.",
+      "Order number 7 4 2 0. I want a snack board at zone \"B\" with orange bacon, purple fries, yellow corn, and green capsicum. Put pink flower candy at zone \"D\".",
     items: [
       {
         zone: "B",
@@ -1093,7 +1093,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 1,
     spokenText:
-      "Order number 4 3 8 1. I want a noodle and bread combo. Zone A has red noodles with green mushroom. Zone C has brown small loaf. Zone D has yellow round candy.",
+      "Order number 4 3 8 1. I want a noodle and bread combo. Zone \"A\" has red noodles with green mushroom. Zone \"C\" has brown small loaf. Zone \"D\" has yellow round candy.",
     items: [
       {
         zone: "A",
@@ -1118,7 +1118,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 2,
     spokenText:
-      "Order number 8 0 2 7. I want a burger at zone B with pink top burger bun, green cheese, orange tomato, red lettuce, purple bacon, and pink bottom burger bun. Put blue heart candy at zone A.",
+      "Order number 8 0 2 7. I want a burger at zone \"B\" with pink top burger bun, green cheese, orange tomato, red lettuce, purple bacon, and pink bottom burger bun. Put blue heart candy at zone \"A\".",
     items: [
       {
         zone: "B",
@@ -1170,7 +1170,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 3,
     spokenText:
-      "Order number 1 7 5 9. I want a veggie feast at zone C with yellow cauliflower, red carrot, blue corn, green capsicum, and orange mushroom. I also want purple round popsicle at zone B.",
+      "Order number 1 7 5 9. I want a veggie feast at zone \"C\" with yellow cauliflower, red carrot, blue corn, green capsicum, and orange mushroom. I also want purple round popsicle at zone \"B\".",
     items: [
       {
         zone: "C",
@@ -1215,7 +1215,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 4,
     spokenText:
-      "Order number 6 2 0 9. I want a bread plate at zone D with green round bun, brown baguette, orange bread slices, and pink cinnamon roll. Put blue star candy at zone A.",
+      "Order number 6 2 0 9. I want a bread plate at zone \"D\" with green round bun, brown baguette, orange bread slices, and pink cinnamon roll. Put blue star candy at zone \"A\".",
     items: [
       {
         zone: "D",
@@ -1253,7 +1253,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 5,
     spokenText:
-      "Order number 3 9 4 6. I want a hotdog combo at zone B with yellow hotdog, purple round bun, red tomato, and green lettuce. I also want orange fries at zone D and pink rectangular candy at zone A.",
+      "Order number 3 9 4 6. I want a hotdog combo at zone \"B\" with yellow hotdog, purple round bun, red tomato, and green lettuce. I also want orange fries at zone \"D\" and pink rectangular candy at zone \"A\".",
     items: [
       {
         zone: "B",
@@ -1292,7 +1292,7 @@ export const HARD_ORDERS: OrderTemplate[] = [
     difficulty: "hard",
     customerSlot: 6,
     spokenText:
-      "Order number 9 5 7 2. I want a final mix. Zone A has blue dumpling. Zone B has brown bacon and yellow corn. Zone C has green cheese. Zone D has purple flower candy.",
+      "Order number 9 5 7 2. I want a final mix. Zone \"A\" has blue dumpling. Zone \"B\" has brown bacon and yellow corn. Zone \"C\" has green cheese. Zone \"D\" has purple flower candy.",
     items: [
       { zone: "A", foodItemId: "dumpling", colour: "blue" },
       {

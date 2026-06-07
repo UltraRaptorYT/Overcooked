@@ -146,6 +146,7 @@ create table if not exists overcooked_26_order_templates (
     customer_slot between 1 and 6
   ),
   spoken_text text not null,
+  audio_path text null,
   required_total_cook_time_seconds integer not null default 0 check (required_total_cook_time_seconds >= 0),
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -354,6 +355,7 @@ select
   gr.display_order as group_no,
   gr.name as group_name,
   ot.order_no,
+  ot.audio_path,
   ot.customer_slot,
   go.status,
   go.assigned_at,

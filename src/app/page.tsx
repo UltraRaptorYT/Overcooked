@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GROUPS, COOLDOWN_GAP, type GroupConfig } from "@/config/app";
+import {
+  playKokoroSpeech,
+  preloadKokoroSpeech,
+  stopKokoroSpeech,
+} from "@/lib/kokoro-tts";
 
 // ─── Types ──────────────────────────────────────────────────────
 interface AssignedOrder {
@@ -228,11 +233,14 @@ export default function KioskPage() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
-  const synthRef = useRef<SpeechSynthesis | null>(null);
 
   useEffect(() => {
-    synthRef.current = window.speechSynthesis;
     loadHistory();
+    void preloadKokoroSpeech({ speed: 0.8 });
+
+    return () => {
+      stopKokoroSpeech();
+    };
   }, []);
 
   const loadHistory = async () => {
@@ -246,36 +254,11 @@ export default function KioskPage() {
   };
 
   const speak = useCallback((text: string, groupId: number): Promise<void> => {
-    return new Promise((resolve) => {
-      if (!synthRef.current) {
-        resolve();
-        return;
-      }
-      synthRef.current.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.4;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-
-      // Try to use an English voice
-      const voices = synthRef.current.getVoices();
-      const english =
-        voices.find((v) => v.lang.startsWith("en") && v.default) ||
-        voices.find((v) => v.lang.startsWith("en"));
-      if (english) utterance.voice = english;
-
-      utterance.onstart = () => setSpeakingGroup(groupId);
-      utterance.onend = () => {
-        setSpeakingGroup(null);
-        resolve();
-      };
-      utterance.onerror = () => {
-        setSpeakingGroup(null);
-        resolve();
-      };
-
-      synthRef.current.speak(utterance);
+    return playKokoroSpeech(text, {
+      speed: 0.8,
+      volume: 1,
+      onStart: () => setSpeakingGroup(groupId),
+      onEnd: () => setSpeakingGroup(null),
     });
   }, []);
 

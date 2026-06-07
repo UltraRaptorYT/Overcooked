@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  playKokoroSpeech,
+  preloadKokoroSpeech,
+  stopKokoroSpeech,
+} from "@/lib/kokoro-tts";
 
 const sampleText = `Yesterday, an upright explorer walked left across the playground before heading right toward the old tower. On the way, he downloaded a map from the campsite computer and looked down at the directions carefully. Suddenly, a leftover sandwich fell right out of his backpack, so he bent down to pick it up.
 
@@ -9,8 +14,6 @@ As he continued up the hill, he saw a downright strange sign pointing left and r
 After resting for a while, he walked right out of the cabin and headed down the rocky path. Near the riverbank, he spotted another leftover bag beside an upside-down canoe. He quickly looked up, waved both hands in excitement, and ran right toward his friends waiting near the campsite entrance.`;
 
 export default function TextToSpeechPage() {
-  const synthRef = useRef<SpeechSynthesis | null>(null);
-
   const [text, setText] = useState(sampleText);
   const [rate, setRate] = useState(1);
   const [pitch, setPitch] = useState(1);
@@ -29,10 +32,10 @@ export default function TextToSpeechPage() {
   }, [text]);
 
   useEffect(() => {
-    synthRef.current = window.speechSynthesis;
+    void preloadKokoroSpeech();
 
     return () => {
-      synthRef.current?.cancel();
+      stopKokoroSpeech();
     };
   }, []);
 
@@ -54,25 +57,16 @@ export default function TextToSpeechPage() {
   }, [estimatedSeconds]);
 
   const handleSpeak = () => {
-    if (!synthRef.current || !text.trim()) return;
-
-    synthRef.current.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    utterance.rate = rate;
-    utterance.pitch = pitch;
-    utterance.volume = volume;
-
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-
-    synthRef.current.speak(utterance);
+    void playKokoroSpeech(text, {
+      speed: rate,
+      volume,
+      onStart: () => setIsSpeaking(true),
+      onEnd: () => setIsSpeaking(false),
+    });
   };
 
   const handleStop = () => {
-    synthRef.current?.cancel();
+    stopKokoroSpeech();
     setIsSpeaking(false);
   };
 

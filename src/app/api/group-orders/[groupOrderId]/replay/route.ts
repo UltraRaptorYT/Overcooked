@@ -1,5 +1,6 @@
 import { NextResponse as ReplayNextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { getOrderAudioPath } from "@/lib/order-audio";
 import { OVERCOOKED_26_TABLES as ReplayT } from "@/lib/overcooked-26/tables";
 
 type ReplayRouteContext = {
@@ -26,7 +27,7 @@ export async function POST(_request: Request, context: ReplayRouteContext) {
 
   const { data: orderTemplate, error: orderTemplateError } = await supabase
     .from(ReplayT.orderTemplates)
-    .select("spoken_text")
+    .select("order_no, difficulty, spoken_text, audio_path")
     .eq("id", existingOrder.order_template_id)
     .single();
 
@@ -53,6 +54,14 @@ export async function POST(_request: Request, context: ReplayRouteContext) {
   }
 
   return ReplayNextResponse.json({
+    orderNo: orderTemplate.order_no,
+    difficulty: orderTemplate.difficulty,
+    audioPath:
+      orderTemplate.audio_path ??
+      getOrderAudioPath({
+        difficulty: orderTemplate.difficulty,
+        orderNo: orderTemplate.order_no,
+      }),
     spokenText: orderTemplate.spoken_text,
   });
 }

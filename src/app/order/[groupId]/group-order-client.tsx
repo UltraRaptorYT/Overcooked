@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import supabase from "@/lib/supabase";
 import { OVERCOOKED_26_TABLES as T } from "@/lib/overcooked-26/tables";
+import {
+  playKokoroSpeech,
+  stopKokoroSpeech,
+} from "@/lib/kokoro-tts";
 
 type Props = {
   groupId: string;
@@ -11,22 +15,33 @@ type Props = {
 
 type ReceivedOrder = {
   groupOrderId: string;
+  audioPath?: string;
   spokenText?: string;
   assignedAt?: string;
 };
 
-function speak(text: string) {
-  if (typeof window === "undefined") return;
+async function playOrderAudio(audioPath?: string, spokenText?: string) {
+  stopKokoroSpeech();
 
-  window.speechSynthesis.cancel();
+  if (audioPath) {
+    const player = new Audio(audioPath);
+    player.preload = "auto";
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.88;
-  utterance.pitch = 1;
-  utterance.volume = 1;
-  utterance.lang = "en-SG";
+    const playedPublicAudio = await new Promise<boolean>((resolve) => {
+      player.onended = () => resolve(true);
+      player.onerror = () => resolve(false);
+      void player.play().catch(() => resolve(false));
+    });
 
-  window.speechSynthesis.speak(utterance);
+    if (playedPublicAudio) return;
+  }
+
+  if (spokenText?.trim()) {
+    await playKokoroSpeech(spokenText, {
+      speed: 0.88,
+      volume: 1,
+    });
+  }
 }
 
 export function GroupOrderClient({ groupId, groupName }: Props) {
@@ -70,6 +85,7 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
 
       const nextOrder: ReceivedOrder = {
         groupOrderId: data.groupOrderId,
+        audioPath: data.audioPath,
         spokenText: String(data.spokenText ?? ""),
         assignedAt: data.assignedAt,
       };
@@ -79,11 +95,12 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
         groupName,
         groupOrderId: nextOrder.groupOrderId,
         assignedAt: nextOrder.assignedAt,
+        audioPath: nextOrder.audioPath,
         spokenText: nextOrder.spokenText,
       });
 
       setOrders((prev) => [nextOrder, ...prev]);
-      speak(nextOrder.spokenText ?? "");
+      void playOrderAudio(nextOrder.audioPath, nextOrder.spokenText);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong",
@@ -114,17 +131,22 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
           groupId,
           groupName,
           groupOrderId,
+          audioPath: data.audioPath,
           spokenText: data.spokenText,
         });
 
         setOrders((currentOrders) =>
           currentOrders.map((order) =>
             order.groupOrderId === groupOrderId
-              ? { ...order, spokenText: data.spokenText }
+              ? {
+                  ...order,
+                  audioPath: data.audioPath,
+                  spokenText: data.spokenText,
+                }
               : order,
           ),
         );
-        speak(data.spokenText);
+        void playOrderAudio(data.audioPath, data.spokenText);
       } catch (error) {
         setErrorMessage(
           error instanceof Error ? error.message : "Something went wrong",
@@ -138,6 +160,10 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
 
   useEffect(() => {
     void loadOrders();
+
+    return () => {
+      stopKokoroSpeech();
+    };
   }, [loadOrders]);
 
   useEffect(() => {
@@ -225,7 +251,7 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
 
           <button
             type="button"
-            onClick={() => window.speechSynthesis.cancel()}
+            onClick={stopKokoroSpeech}
             className="rounded-2xl border border-orange-200 bg-white px-6 py-4 font-semibold text-orange-900 transition hover:bg-orange-100"
           >
             Stop Audio

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { OVERCOOKED_26_TABLES as T } from "@/lib/overcooked-26/tables";
+import { getOrderAudioPath } from "@/lib/order-audio";
 
 type RouteContext = {
   params: Promise<{
@@ -78,7 +79,7 @@ export async function POST(_request: Request, context: RouteContext) {
   const { data: candidateOrders, error: candidateOrdersError } = await supabase
     .from(T.orderTemplates)
     .select(
-      "id, order_no, spoken_text, difficulty, required_total_cook_time_seconds",
+      "id, order_no, spoken_text, audio_path, difficulty, required_total_cook_time_seconds",
     )
     .eq("difficulty", round.mode)
     .eq("is_active", true);
@@ -139,7 +140,15 @@ export async function POST(_request: Request, context: RouteContext) {
   return NextResponse.json({
     groupOrderId: groupOrder.id,
     assignedAt: groupOrder.assigned_at,
-    // Important: visually hide this on the UI. It is only used for browser speechSynthesis.
+    orderNo: selectedOrder.order_no,
+    difficulty: selectedOrder.difficulty,
+    audioPath:
+      selectedOrder.audio_path ??
+      getOrderAudioPath({
+        difficulty: selectedOrder.difficulty,
+        orderNo: selectedOrder.order_no,
+      }),
+    // Important: visually hide this on the UI. It is only used for text-to-speech.
     spokenText: selectedOrder.spoken_text,
   });
 }

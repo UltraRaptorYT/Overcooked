@@ -8,12 +8,15 @@ import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { FOOD_ITEMS, EASY_ORDERS, HARD_ORDERS } from "../src/lib/game-data";
 import { calculateOrderCookTimeSeconds } from "../src/lib/game-data/helpers";
+import { getOrderAudioPath } from "../src/lib/order-audio";
 import type { OrderTemplate } from "../src/lib/game-data/types";
 
 config({ path: ".env.local" });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const serviceRoleKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ??
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl) {
   throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL in .env.local");
@@ -87,6 +90,12 @@ async function seedOrderTemplates(orders: OrderTemplate[]) {
           difficulty: order.difficulty,
           customer_slot: order.customerSlot,
           spoken_text: order.spokenText,
+          audio_path:
+            order.audioPath ??
+            getOrderAudioPath({
+              difficulty: order.difficulty,
+              orderNo: order.orderNo,
+            }),
           required_total_cook_time_seconds: requiredCookTime,
           is_active: true,
         },

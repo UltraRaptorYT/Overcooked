@@ -23,6 +23,7 @@ export type OrderTemplate = {
   customerSlot: 1 | 2 | 3 | 4 | 5 | 6;
   items: OrderItem[];
   spokenText: string;
+  audioPath?: string;
 };
 
 export const ZONES: Zone[] = ["A", "B", "C", "D"];
