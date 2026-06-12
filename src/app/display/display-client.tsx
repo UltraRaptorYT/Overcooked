@@ -53,6 +53,7 @@ type DisplayRound = {
   mode: RoundMode;
   status: RoundStatus;
   duration_seconds: number;
+  rush_hour_duration_seconds: number;
   round_started_at: string | null;
 };
 
@@ -85,13 +86,32 @@ type CookingStartedPayload = {
   session: CookingSession;
 };
 
-type AlarmAudioContext = AudioContext & {
-  webkitAudioContext?: never;
+type CookingStoppedPayload = {
+  groupOrderId: string;
+  session: CookingSession;
 };
 
-type WindowWithWebAudio = Window & {
-  webkitAudioContext?: typeof AudioContext;
+type PitchableAudioElement = HTMLAudioElement & {
+  preservesPitch?: boolean;
+  mozPreservesPitch?: boolean;
+  webkitPreservesPitch?: boolean;
 };
+
+const ROUND_DURATION_MINUTES: Record<RoundMode, number> = {
+  easy: 20,
+  hard: 35,
+};
+const BACKGROUND_MUSIC_SRC = "/background-music.mp3";
+const DISPLAY_SFX = {
+  countdownBeep: "/countdown-beep.mp3",
+  orderCompleteDing: "/order-complete-ding.mp3",
+  rushHour: "/rush-hour.mp3",
+  sizzleLoop: "/sizzle-loop.mp3",
+  timesUpBell: "/times-up-bell.mp3",
+} as const;
+const DISPLAY_SFX_NAMES = Object.keys(DISPLAY_SFX) as DisplaySfxName[];
+
+type DisplaySfxName = keyof typeof DISPLAY_SFX;
 
 function formatSeconds(seconds: number) {
   const safeSeconds = Math.max(0, Math.floor(seconds));
@@ -100,13 +120,20 @@ function formatSeconds(seconds: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+function setAudioPitchPreservation(
+  audio: PitchableAudioElement,
+  preservePitch: boolean,
+) {
+  audio.preservesPitch = preservePitch;
+  audio.mozPreservesPitch = preservePitch;
+  audio.webkitPreservesPitch = preservePitch;
+}
+
 function getSessionTiming(session: CookingSession | null, now: number) {
   if (!session) {
     return {
-      bufferRemaining: 0,
       elapsed: 0,
       phase: "Waiting",
-      remaining: 0,
     };
   }
 
@@ -114,18 +141,10 @@ function getSessionTiming(session: CookingSession | null, now: number) {
     0,
     Math.floor((now - new Date(session.started_at).getTime()) / 1000),
   );
-  const playerTimer = session.player_timer_seconds ?? 0;
-  const remaining = Math.max(0, playerTimer - elapsed);
-  const bufferRemaining = Math.max(
-    0,
-    playerTimer + session.buffer_seconds - elapsed,
-  );
 
   return {
-    bufferRemaining,
     elapsed,
-    phase: remaining > 0 ? "Cooking" : bufferRemaining > 0 ? "Buffer" : "Past buffer",
-    remaining,
+    phase: "Cooking",
   };
 }
 
@@ -173,66 +192,26 @@ function applyCookingStartedToGroup(
   };
 }
 
-let alarmAudioContext: AlarmAudioContext | null = null;
-
-function getAlarmAudioContext() {
-  if (typeof window === "undefined") return null;
-
-  const audioWindow = window as WindowWithWebAudio;
-  const AudioContextConstructor =
-    window.AudioContext ?? audioWindow.webkitAudioContext;
-
-  if (!AudioContextConstructor) return null;
-
-  alarmAudioContext ??= new AudioContextConstructor();
-  return alarmAudioContext;
-}
-
-async function unlockAlarmSound() {
-  const context = getAlarmAudioContext();
-  if (!context) return;
-
-  try {
-    await context.resume();
-  } catch {
-    // Browsers may reject this before a user gesture; the next gesture retries it.
-  }
-}
-
-async function playAlarmSound() {
-  const context = getAlarmAudioContext();
-  if (!context) return;
-
-  try {
-    await context.resume();
-
-    const startTime = context.currentTime + 0.02;
-    const beeps = [
-      { frequency: 880, offset: 0 },
-      { frequency: 660, offset: 0.25 },
-      { frequency: 880, offset: 0.5 },
-    ];
-
-    for (const beep of beeps) {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const beepStart = startTime + beep.offset;
-      const beepEnd = beepStart + 0.16;
-
-      oscillator.type = "square";
-      oscillator.frequency.setValueAtTime(beep.frequency, beepStart);
-      gain.gain.setValueAtTime(0.0001, beepStart);
-      gain.gain.exponentialRampToValueAtTime(0.25, beepStart + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, beepEnd);
-
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start(beepStart);
-      oscillator.stop(beepEnd + 0.02);
-    }
-  } catch {
-    // If autoplay policy blocks the alarm, keep the display running.
-  }
+function applyCookingStoppedToGroup(
+  group: DisplayGroup,
+  payload: CookingStoppedPayload,
+) {
+  return {
+    ...group,
+    orders: group.orders.map((order) =>
+      order.groupOrder.id !== payload.groupOrderId
+        ? order
+        : {
+            ...order,
+            groupOrder: {
+              ...order.groupOrder,
+              status: "cooked",
+            },
+            activeCookingSession: null,
+            latestCookingSession: payload.session,
+          },
+    ),
+  };
 }
 
 export function DisplayClient() {
@@ -240,10 +219,20 @@ export function DisplayClient() {
   const [now, setNow] = useState(() => Date.now());
   const [durationMinutes, setDurationMinutes] = useState("20");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [musicErrorMessage, setMusicErrorMessage] = useState<string | null>(
+    null,
+  );
   const [isSaving, setIsSaving] = useState(false);
-  const [isLive, setIsLive] = useState(false);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [startCountdown, setStartCountdown] = useState<number | null>(null);
   const previousMatchRemainingRef = useRef<number | null>(null);
-  const previousSessionBufferRemainingRef = useRef<Record<string, number>>({});
+  const previousCountdownSecondRef = useRef<number | null>(null);
+  const previousRushHourActiveRef = useRef(false);
+  const backgroundMusicRef = useRef<PitchableAudioElement | null>(null);
+  const sfxAudioRef = useRef<Partial<Record<DisplaySfxName, HTMLAudioElement>>>(
+    {},
+  );
 
   const currentRound = displayState?.currentRound ?? null;
   const matchRemaining = useMemo(() => {
@@ -260,6 +249,21 @@ export function DisplayClient() {
     );
     return Math.max(0, currentRound.duration_seconds - elapsed);
   }, [currentRound, now]);
+  const rushHourSeconds = currentRound?.rush_hour_duration_seconds ?? 5 * 60;
+  const rushHourActive =
+    currentRound?.status === "playing" &&
+    matchRemaining > 0 &&
+    matchRemaining <= rushHourSeconds;
+  const activeCookingCount = useMemo(
+    () =>
+      (displayState?.groups ?? []).reduce(
+        (count, group) =>
+          count +
+          group.orders.filter((order) => order.activeCookingSession).length,
+        0,
+      ),
+    [displayState?.groups],
+  );
 
   async function loadDisplay() {
     try {
@@ -272,7 +276,9 @@ export function DisplayClient() {
 
       setDisplayState(data);
       if (data.currentRound?.duration_seconds) {
-        setDurationMinutes(String(Math.round(data.currentRound.duration_seconds / 60)));
+        setDurationMinutes(
+          String(Math.round(data.currentRound.duration_seconds / 60)),
+        );
       }
       setErrorMessage(null);
     } catch (error) {
@@ -314,6 +320,150 @@ export function DisplayClient() {
     }
   }
 
+  const getSfxAudio = useCallback((name: DisplaySfxName) => {
+    const existingAudio = sfxAudioRef.current[name];
+    if (existingAudio) return existingAudio;
+
+    const audio = new Audio(DISPLAY_SFX[name]);
+    audio.preload = "auto";
+    audio.volume =
+      name === "sizzleLoop" ? 0.32 : name === "rushHour" ? 0.95 : 0.85;
+    audio.load();
+    sfxAudioRef.current[name] = audio;
+    return audio;
+  }, []);
+
+  const preloadDisplaySfx = useCallback(() => {
+    for (const sfxName of DISPLAY_SFX_NAMES) {
+      getSfxAudio(sfxName);
+    }
+  }, [getSfxAudio]);
+
+  const playSfx = useCallback(
+    (
+      name: DisplaySfxName,
+      options: { playbackRate?: number; preservePitch?: boolean } = {},
+    ) => {
+      const audio = getSfxAudio(name);
+      const player = audio.cloneNode(true) as PitchableAudioElement;
+      player.volume = audio.volume;
+      player.playbackRate = options.playbackRate ?? 1;
+      if (options.preservePitch !== undefined) {
+        setAudioPitchPreservation(player, options.preservePitch);
+      }
+      void player.play().catch(() => {
+        // Display keeps running if the browser blocks sound before interaction.
+      });
+    },
+    [getSfxAudio],
+  );
+
+  const updateSizzleLoop = useCallback(
+    (shouldPlay: boolean) => {
+      const audio = getSfxAudio("sizzleLoop");
+      audio.loop = true;
+
+      if (!shouldPlay) {
+        audio.pause();
+        audio.currentTime = 0;
+        return;
+      }
+
+      void audio.play().catch(() => {
+        // Display keeps running if the browser blocks sound before interaction.
+      });
+    },
+    [getSfxAudio],
+  );
+
+  function getBackgroundMusic() {
+    if (typeof window === "undefined") return null;
+
+    if (!backgroundMusicRef.current) {
+      const audio = new Audio(BACKGROUND_MUSIC_SRC) as PitchableAudioElement;
+      audio.loop = true;
+      audio.preload = "auto";
+      audio.volume = 0.45;
+      setAudioPitchPreservation(audio, true);
+      backgroundMusicRef.current = audio;
+    }
+
+    return backgroundMusicRef.current;
+  }
+
+  async function startBackgroundMusic(forceEnabled = false) {
+    if (!forceEnabled && !musicEnabled) return;
+
+    const audio = getBackgroundMusic();
+    if (!audio) return;
+
+    try {
+      setMusicErrorMessage(null);
+      setAudioPitchPreservation(audio, true);
+      audio.playbackRate = 1;
+      await audio.play();
+      setMusicPlaying(true);
+    } catch {
+      setMusicPlaying(false);
+      setMusicErrorMessage(
+        "Music file not ready: add public/background-music.mp3",
+      );
+    }
+  }
+
+  const stopBackgroundMusic = useCallback(() => {
+    const audio = backgroundMusicRef.current;
+    if (audio) {
+      audio.pause();
+    }
+    setMusicPlaying(false);
+  }, []);
+
+  function toggleBackgroundMusic() {
+    const nextMusicEnabled = !musicEnabled;
+    setMusicEnabled(nextMusicEnabled);
+
+    if (!nextMusicEnabled) {
+      stopBackgroundMusic();
+      return;
+    }
+
+    if (currentRound?.status === "playing" && matchRemaining > 0) {
+      void startBackgroundMusic(true);
+    }
+  }
+
+  async function setDifficulty(difficulty: RoundMode) {
+    const minutes = ROUND_DURATION_MINUTES[difficulty];
+    setDurationMinutes(String(minutes));
+    await updateDisplay({
+      action: "set_difficulty",
+      difficulty,
+      durationSeconds: minutes * 60,
+    });
+  }
+
+  async function startMatchWithCountdown() {
+    if (startCountdown !== null) return;
+
+    preloadDisplaySfx();
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    for (const count of [3, 2, 1]) {
+      setStartCountdown(count);
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    }
+
+    setStartCountdown(null);
+
+    await updateDisplay({
+      action: "start",
+      durationSeconds,
+    });
+    void startBackgroundMusic();
+  }
+
   const applyCookingStarted = useCallback((payload: CookingStartedPayload) => {
     setDisplayState((currentState) => {
       if (!currentState) return currentState;
@@ -324,6 +474,20 @@ export function DisplayClient() {
           group.id === payload.groupId
             ? applyCookingStartedToGroup(group, payload)
             : group,
+        ),
+      };
+    });
+    setNow(Date.now());
+  }, []);
+
+  const applyCookingStopped = useCallback((payload: CookingStoppedPayload) => {
+    setDisplayState((currentState) => {
+      if (!currentState) return currentState;
+
+      return {
+        ...currentState,
+        groups: currentState.groups.map((group) =>
+          applyCookingStoppedToGroup(group, payload),
         ),
       };
     });
@@ -362,25 +526,12 @@ export function DisplayClient() {
 
   useEffect(() => {
     void loadDisplay();
-  }, []);
+    preloadDisplaySfx();
+  }, [preloadDisplaySfx]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const unlock = () => {
-      void unlockAlarmSound();
-    };
-
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
-
-    return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-    };
   }, []);
 
   useEffect(() => {
@@ -391,47 +542,69 @@ export function DisplayClient() {
       previousMatchRemaining > 0 &&
       matchRemaining === 0
     ) {
-      void playAlarmSound();
+      playSfx("timesUpBell");
+      stopBackgroundMusic();
     }
     previousMatchRemainingRef.current = matchRemaining;
+  }, [currentRound?.status, matchRemaining, playSfx, stopBackgroundMusic]);
 
-    const previousSessionRemaining = previousSessionBufferRemainingRef.current;
-    const nextSessionRemaining: Record<string, number> = {};
+  useEffect(() => {
+    if (currentRound?.status !== "playing") {
+      stopBackgroundMusic();
+    }
+  }, [currentRound?.status, stopBackgroundMusic]);
 
-    for (const group of displayState?.groups ?? []) {
-      for (const order of group.orders) {
-        const session = order.activeCookingSession;
-        if (!session) continue;
+  useEffect(() => {
+    const wasRushHourActive = previousRushHourActiveRef.current;
+    if (rushHourActive && !wasRushHourActive) {
+      playSfx("rushHour", {
+        playbackRate: 1.2,
+        preservePitch: false,
+      });
+    }
+    previousRushHourActiveRef.current = rushHourActive;
+  }, [playSfx, rushHourActive]);
 
-        const timing = getSessionTiming(session, now);
-        const previousRemaining = previousSessionRemaining[session.id];
-
-        if (
-          previousRemaining !== undefined &&
-          previousRemaining > 0 &&
-          timing.bufferRemaining === 0
-        ) {
-          void playAlarmSound();
-        }
-
-        nextSessionRemaining[session.id] = timing.bufferRemaining;
-      }
+  useEffect(() => {
+    if (
+      currentRound?.status !== "playing" ||
+      matchRemaining <= 0 ||
+      matchRemaining > 10
+    ) {
+      previousCountdownSecondRef.current = null;
+      return;
     }
 
-    previousSessionBufferRemainingRef.current = nextSessionRemaining;
-  }, [currentRound?.status, displayState?.groups, matchRemaining, now]);
+    if (previousCountdownSecondRef.current !== matchRemaining) {
+      playSfx("countdownBeep");
+      previousCountdownSecondRef.current = matchRemaining;
+    }
+  }, [currentRound?.status, matchRemaining, playSfx]);
+
+  useEffect(() => {
+    updateSizzleLoop(
+      currentRound?.status === "playing" &&
+        matchRemaining > 0 &&
+        activeCookingCount > 0,
+    );
+  }, [
+    activeCookingCount,
+    currentRound?.status,
+    matchRemaining,
+    updateSizzleLoop,
+  ]);
 
   useEffect(() => {
     const channel = supabase
       .channel("display-board")
-      .on(
-        "broadcast",
-        { event: "cooking-started" },
-        ({ payload }) => {
-          applyCookingStarted(payload as CookingStartedPayload);
-          void loadDisplay();
-        },
-      )
+      .on("broadcast", { event: "cooking-started" }, ({ payload }) => {
+        applyCookingStarted(payload as CookingStartedPayload);
+        void loadDisplay();
+      })
+      .on("broadcast", { event: "cooking-stopped" }, ({ payload }) => {
+        applyCookingStopped(payload as CookingStoppedPayload);
+        void loadDisplay();
+      })
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: T.games },
@@ -452,18 +625,43 @@ export function DisplayClient() {
         { event: "*", schema: "public", table: T.cookingSessions },
         () => void loadDisplay(),
       )
-      .subscribe((status) => setIsLive(status === "SUBSCRIBED"));
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: T.servedOrders },
+        ({ new: servedOrder }) => {
+          const decision = (servedOrder as { decision?: string }).decision;
+          if (decision === "approved") {
+            playSfx("orderCompleteDing");
+          }
+          void loadDisplay();
+        },
+      )
+      .subscribe();
 
     return () => {
-      setIsLive(false);
       void supabase.removeChannel(channel);
     };
-  }, [applyCookingStarted]);
+  }, [applyCookingStarted, applyCookingStopped, playSfx]);
 
-  const durationSeconds = Math.max(60, Math.floor(Number(durationMinutes) * 60));
+  const durationSeconds = Math.max(
+    60,
+    Math.floor(Number(durationMinutes) * 60),
+  );
 
   return (
     <main className="min-h-screen bg-slate-950 p-5 text-white">
+      {startCountdown !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90">
+          <div className="text-center">
+            <p className="text-sm font-black uppercase tracking-[0.35em] text-orange-300">
+              Starting
+            </p>
+            <p className="mt-4 text-[clamp(8rem,28vw,18rem)] font-black leading-none tabular-nums text-white">
+              {startCountdown}
+            </p>
+          </div>
+        </div>
+      )}
       <div className="mx-auto max-w-7xl">
         <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
           <div className="rounded-2xl bg-white p-5 text-slate-950">
@@ -483,7 +681,13 @@ export function DisplayClient() {
               </div>
 
               <div className="text-right">
-                <p className="text-sm font-bold text-slate-500">Match Time</p>
+                <p
+                  className={`text-sm font-bold ${
+                    rushHourActive ? "text-red-600" : "text-slate-500"
+                  }`}
+                >
+                  {rushHourActive ? "Rush Hour - 2x Score" : "Match Time"}
+                </p>
                 <p className="text-7xl font-black tabular-nums">
                   {formatSeconds(matchRemaining)}
                 </p>
@@ -497,74 +701,81 @@ export function DisplayClient() {
                 <p className="text-sm font-bold uppercase text-slate-400">
                   Controls
                 </p>
-                <p className="text-sm text-slate-400">
-                  {isLive ? "Live" : "Connecting"}
-                </p>
               </div>
               <input
                 inputMode="numeric"
                 value={durationMinutes}
+                disabled={isSaving || startCountdown !== null}
                 onChange={(event) =>
                   setDurationMinutes(event.target.value.replace(/\D/g, ""))
                 }
-                className="w-24 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-right text-xl font-black text-white outline-none"
+                className="w-24 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-right text-xl font-black text-white outline-none disabled:opacity-50"
               />
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() =>
-                  updateDisplay({
-                    action: "set_difficulty",
-                    difficulty: "easy",
-                    durationSeconds,
-                  })
-                }
-                disabled={isSaving}
+                onClick={() => setDifficulty("easy")}
+                disabled={isSaving || startCountdown !== null}
                 className="rounded-xl bg-emerald-500 px-4 py-3 font-black text-emerald-950 disabled:opacity-50"
               >
                 Easy
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  updateDisplay({
-                    action: "set_difficulty",
-                    difficulty: "hard",
-                    durationSeconds,
-                  })
-                }
-                disabled={isSaving}
+                onClick={() => setDifficulty("hard")}
+                disabled={isSaving || startCountdown !== null}
                 className="rounded-xl bg-amber-400 px-4 py-3 font-black text-amber-950 disabled:opacity-50"
               >
                 Hard
               </button>
               <button
                 type="button"
-                onClick={() => updateDisplay({ action: "start", durationSeconds })}
-                disabled={isSaving}
+                onClick={startMatchWithCountdown}
+                disabled={isSaving || startCountdown !== null}
                 className="rounded-xl bg-orange-500 px-4 py-3 font-black text-orange-950 disabled:opacity-50"
               >
                 Start
               </button>
               <button
                 type="button"
-                onClick={() => updateDisplay({ action: "reset", durationSeconds })}
-                disabled={isSaving}
+                onClick={() => {
+                  stopBackgroundMusic();
+                  void updateDisplay({ action: "reset", durationSeconds });
+                }}
+                disabled={isSaving || startCountdown !== null}
                 className="rounded-xl bg-white px-4 py-3 font-black text-slate-950 disabled:opacity-50"
               >
                 Reset
               </button>
               <button
                 type="button"
+                onClick={toggleBackgroundMusic}
+                disabled={startCountdown !== null}
+                className="rounded-xl bg-sky-400 px-4 py-3 font-black text-sky-950 disabled:opacity-50"
+              >
+                {musicPlaying
+                  ? "Music Playing"
+                  : musicEnabled
+                    ? "Music Enabled"
+                    : "Music Muted"}
+              </button>
+              <button
+                type="button"
                 onClick={clearExistingOrders}
-                disabled={isSaving}
-                className="col-span-2 rounded-xl bg-red-600 px-4 py-3 font-black text-white disabled:opacity-50"
+                disabled={isSaving || startCountdown !== null}
+                className="rounded-xl bg-red-600 px-4 py-3 font-black text-white disabled:opacity-50"
               >
                 Clear Orders
               </button>
             </div>
+
+            {musicErrorMessage && (
+              <div className="mt-3 rounded-xl border border-amber-300/40 bg-amber-950 p-3 text-sm text-amber-100">
+                {musicErrorMessage}
+              </div>
+            )}
 
             {errorMessage && (
               <div className="mt-3 rounded-xl border border-red-400/40 bg-red-950 p-3 text-sm text-red-100">
@@ -601,7 +812,7 @@ export function DisplayClient() {
                 <div className="mt-4 grid gap-3">
                   {activeOrders.length === 0 ? (
                     <div className="rounded-xl bg-slate-100 p-4 text-slate-600">
-                      No active cooking timer
+                      No active cooking stopwatch
                     </div>
                   ) : (
                     activeOrders.map((order) => {
@@ -619,39 +830,12 @@ export function DisplayClient() {
                                 Order #{order.order.orderNo ?? "--"}
                               </p>
                               <p className="text-xs font-bold uppercase text-slate-500">
-                                {timing.phase}
+                                Cooking
                               </p>
                             </div>
-                            <p className="text-3xl font-black tabular-nums">
-                              {formatSeconds(timing.remaining)}
+                            <p className="text-5xl font-black tabular-nums">
+                              {formatSeconds(timing.elapsed)}
                             </p>
-                          </div>
-
-                          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                            <div className="rounded-lg bg-white p-2">
-                              <p className="text-[11px] font-bold text-slate-500">
-                                Timer
-                              </p>
-                              <p className="font-black">
-                                {session?.player_timer_seconds ?? "--"}s
-                              </p>
-                            </div>
-                            <div className="rounded-lg bg-white p-2">
-                              <p className="text-[11px] font-bold text-slate-500">
-                                Buffer
-                              </p>
-                              <p className="font-black">
-                                {formatSeconds(timing.bufferRemaining)}
-                              </p>
-                            </div>
-                            <div className="rounded-lg bg-white p-2">
-                              <p className="text-[11px] font-bold text-slate-500">
-                                Elapsed
-                              </p>
-                              <p className="font-black">
-                                {formatSeconds(timing.elapsed)}
-                              </p>
-                            </div>
                           </div>
                         </div>
                       );

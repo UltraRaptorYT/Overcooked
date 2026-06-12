@@ -1,0 +1,2 @@
+create unique index if not exists overcooked_26_group_orders_game_order_template_unique
+on overcooked_26_group_orders(game_id, order_template_id);

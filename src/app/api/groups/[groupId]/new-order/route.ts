@@ -13,6 +13,10 @@ function pickRandom<TItem>(items: TItem[]) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
+function isUniqueViolation(error: { code?: string } | null | undefined) {
+  return error?.code === "23505";
+}
+
 export async function POST(_request: Request, context: RouteContext) {
   const { groupId } = await context.params;
 
@@ -102,20 +106,40 @@ export async function POST(_request: Request, context: RouteContext) {
     );
   }
 
-  const selectedOrder = pickRandom(availableOrders);
+  let selectedOrder = pickRandom(availableOrders);
+  let groupOrder: { id: string; assigned_at: string } | null = null;
+  let insertError: { message?: string; code?: string } | null = null;
+  const remainingOrders = [...availableOrders];
 
-  const { data: groupOrder, error: insertError } = await supabase
-    .from(T.groupOrders)
-    .insert({
-      game_id: group.game_id,
-      round_id: round.id,
-      group_id: groupId,
-      order_template_id: selectedOrder.id,
-      status: "assigned",
-      assigned_at: new Date().toISOString(),
-    })
-    .select("id, assigned_at")
-    .single();
+  while (remainingOrders.length > 0) {
+    selectedOrder = pickRandom(remainingOrders);
+
+    const result = await supabase
+      .from(T.groupOrders)
+      .insert({
+        game_id: group.game_id,
+        round_id: round.id,
+        group_id: groupId,
+        order_template_id: selectedOrder.id,
+        status: "assigned",
+        assigned_at: new Date().toISOString(),
+      })
+      .select("id, assigned_at")
+      .single();
+
+    groupOrder = result.data;
+    insertError = result.error;
+
+    if (!insertError && groupOrder) break;
+    if (!isUniqueViolation(insertError)) break;
+
+    const usedIndex = remainingOrders.findIndex(
+      (order) => order.id === selectedOrder.id,
+    );
+    if (usedIndex >= 0) {
+      remainingOrders.splice(usedIndex, 1);
+    }
+  }
 
   if (insertError || !groupOrder) {
     return NextResponse.json(

@@ -1,11 +1,12 @@
 import { EASY_ORDERS } from "./easy-orders";
 import { HARD_ORDERS } from "./hard-orders";
 import { FOOD_ITEMS } from "./food-items";
-import type { OrderTemplate, Zone } from "./types";
+import { FOOD_COLOURS, type OrderTemplate, type Zone } from "./types";
 import { calculateOrderCookTimeSeconds } from "./helpers";
 
 const VALID_ZONES: Zone[] = ["A", "B", "C", "D"];
 const CUSTOMER_SLOTS = [1, 2, 3, 4, 5, 6] as const;
+const VALID_COLOURS = new Set<string>(FOOD_COLOURS);
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -50,8 +51,8 @@ function validateOrderSet(name: string, orders: OrderTemplate[]) {
       );
 
       assert(
-        item.colour.trim().length > 0,
-        `Order ${order.orderNo} has item with missing colour`,
+        VALID_COLOURS.has(item.colour),
+        `Order ${order.orderNo} has invalid colour: ${item.colour}`,
       );
     }
 

@@ -10,6 +10,11 @@ const ACTIVE_ORDER_STATUSES = [
   "served",
 ] as const;
 
+const ROUND_DURATION_SECONDS = {
+  easy: 20 * 60,
+  hard: 35 * 60,
+} as const;
+
 type DisplayPatchBody = {
   action?: "set_difficulty" | "start" | "pause" | "reset";
   difficulty?: "easy" | "hard";
@@ -38,7 +43,7 @@ export async function GET() {
   const { data: rounds, error: roundsError } = await supabase
     .from(T.rounds)
     .select(
-      "id, game_id, name, mode, status, duration_seconds, round_started_at, round_ended_at, created_at",
+      "id, game_id, name, mode, status, duration_seconds, rush_hour_duration_seconds, round_started_at, round_ended_at, created_at",
     )
     .eq("game_id", game.id)
     .order("created_at", { ascending: true });
@@ -204,7 +209,12 @@ export async function PATCH(request: Request) {
 
     await supabase
       .from(T.rounds)
-      .update({ status: "ready", round_started_at: null, round_ended_at: null })
+      .update({
+        duration_seconds: ROUND_DURATION_SECONDS[body.difficulty],
+        status: "ready",
+        round_started_at: null,
+        round_ended_at: null,
+      })
       .eq("id", roundId);
 
     await supabase
@@ -221,6 +231,7 @@ export async function PATCH(request: Request) {
   }
 
   if (
+    body.action !== "set_difficulty" &&
     typeof body.durationSeconds === "number" &&
     Number.isFinite(body.durationSeconds) &&
     body.durationSeconds > 0

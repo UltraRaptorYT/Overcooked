@@ -20,16 +20,78 @@ type ReceivedOrder = {
   assignedAt?: string;
 };
 
+type OrderAudioManifest = {
+  files?: Record<
+    string,
+    {
+      file?: string;
+    }
+  >;
+};
+
+const preloadedOrderAudio = new Map<string, HTMLAudioElement>();
+const preloadOrderAudioRequests = new Map<string, Promise<void>>();
+
+function preloadOrderAudioPath(audioPath?: string) {
+  if (!audioPath || preloadedOrderAudio.has(audioPath)) return;
+
+  const audio = new Audio(audioPath);
+  audio.preload = "auto";
+  audio.load();
+  preloadedOrderAudio.set(audioPath, audio);
+
+  const link = document.createElement("link");
+  link.rel = "preload";
+  link.as = "audio";
+  link.href = audioPath;
+  document.head.appendChild(link);
+
+  if (!preloadOrderAudioRequests.has(audioPath)) {
+    preloadOrderAudioRequests.set(
+      audioPath,
+      fetch(audioPath, { cache: "force-cache" })
+        .then(() => undefined)
+        .catch(() => undefined),
+    );
+  }
+}
+
+async function preloadOrderAudioManifest() {
+  try {
+    const response = await fetch("/order-audio/manifest.json", {
+      cache: "force-cache",
+    });
+    if (!response.ok) return;
+
+    const manifest = (await response.json()) as OrderAudioManifest;
+    const audioPaths = Object.values(manifest.files ?? {})
+      .map((entry) => entry.file)
+      .filter((file): file is string => Boolean(file));
+
+    for (const audioPath of audioPaths) {
+      preloadOrderAudioPath(audioPath);
+    }
+  } catch {
+    // Audio still falls back to normal on-demand loading.
+  }
+}
+
 async function playOrderAudio(audioPath?: string, spokenText?: string) {
   stopKokoroSpeech();
 
   if (audioPath) {
-    const player = new Audio(audioPath);
+    const player = preloadedOrderAudio.get(audioPath) ?? new Audio(audioPath);
     player.preload = "auto";
 
     const playedPublicAudio = await new Promise<boolean>((resolve) => {
       player.onended = () => resolve(true);
       player.onerror = () => resolve(false);
+      player.pause();
+      try {
+        player.currentTime = 0;
+      } catch {
+        // Some browsers only allow seeking after enough metadata is loaded.
+      }
       void player.play().catch(() => resolve(false));
     });
 
@@ -61,6 +123,9 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
       }
 
       setOrders(data.orders ?? []);
+      for (const order of data.orders ?? []) {
+        preloadOrderAudioPath(order.audioPath);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong",
@@ -100,6 +165,7 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
       });
 
       setOrders((prev) => [nextOrder, ...prev]);
+      preloadOrderAudioPath(nextOrder.audioPath);
       void playOrderAudio(nextOrder.audioPath, nextOrder.spokenText);
     } catch (error) {
       setErrorMessage(
@@ -146,6 +212,7 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
               : order,
           ),
         );
+        preloadOrderAudioPath(data.audioPath);
         void playOrderAudio(data.audioPath, data.spokenText);
       } catch (error) {
         setErrorMessage(
@@ -160,6 +227,7 @@ export function GroupOrderClient({ groupId, groupName }: Props) {
 
   useEffect(() => {
     void loadOrders();
+    void preloadOrderAudioManifest();
 
     return () => {
       stopKokoroSpeech();

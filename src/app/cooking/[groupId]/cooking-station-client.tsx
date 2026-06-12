@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import supabase from "@/lib/supabase";
 import { OVERCOOKED_26_CONFIG } from "@/lib/overcooked-26/config";
 import { OVERCOOKED_26_TABLES as T } from "@/lib/overcooked-26/tables";
@@ -46,10 +46,10 @@ type Props = {
   groupName: string;
 };
 
-type KeypadTarget = "order" | "timer";
 type StartSource = "camera" | "manual";
 
 const {
+  cameraEnabled,
   cameraBrightnessDropTrigger,
   cameraBrightnessRiseTrigger,
   cameraCoveredBrightnessThreshold,
@@ -70,14 +70,10 @@ function formatDecimalSeconds(seconds: number) {
   return `${sign}${mins}:${secs.toFixed(2).padStart(5, "0")}`;
 }
 
-function getTimerStatus(remainingSeconds: number, bufferRemainingSeconds: number) {
-  if (remainingSeconds > 0) return "Cooking...";
-  if (bufferRemainingSeconds > 0) return "Buffer time";
-  return "Time's up";
-}
-
 function isOrderStartable(order: CookingLookupData | null) {
-  return Boolean(order && STARTABLE_ORDER_STATUSES.has(order.groupOrder.status));
+  return Boolean(
+    order && STARTABLE_ORDER_STATUSES.has(order.groupOrder.status),
+  );
 }
 
 export function CookingStationClient({ groupId, groupName }: Props) {
@@ -90,14 +86,15 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   const cameraCoveredRef = useRef(false);
   const lastBrightnessRef = useRef<number | null>(null);
   const activeSessionRef = useRef<CookingSession | null>(null);
-  const startSourceRef = useRef<StartSource>("camera");
+  const startSourceRef = useRef<StartSource>(
+    cameraEnabled ? "camera" : "manual",
+  );
   const displayChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
     null,
   );
   const displayStartedAtBySessionIdRef = useRef<Record<string, number>>({});
   const selectedOrderRef = useRef<CookingLookupData | null>(null);
   const orderNoInputRef = useRef("");
-  const playerTimerSecondsRef = useRef(0);
   const isStartingRef = useRef(false);
   const isStoppingRef = useRef(false);
   const [orders, setOrders] = useState<CookingLookupData[]>([]);
@@ -105,8 +102,6 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     null,
   );
   const [orderNoInput, setOrderNoInput] = useState("");
-  const [playerTimerSecondsInput, setPlayerTimerSecondsInput] = useState("");
-  const [keypadTarget, setKeypadTarget] = useState<KeypadTarget>("order");
 
   const [activeSession, setActiveSession] = useState<CookingSession | null>(
     null,
@@ -117,7 +112,6 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isLive, setIsLive] = useState(false);
   const [useInlineKeypadOnly, setUseInlineKeypadOnly] = useState(false);
   const [cameraDebug, setCameraDebug] = useState({
     brightness: 0,
@@ -129,31 +123,9 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   activeSessionRef.current = activeSession;
   selectedOrderRef.current = selectedOrder;
   orderNoInputRef.current = orderNoInput;
-  playerTimerSecondsRef.current = Number(playerTimerSecondsInput);
 
-  const typedTimerSeconds = Number(playerTimerSecondsInput) || 0;
-
-  const timerStatus = useMemo(() => {
-    if (!activeSession) return "No active timer";
-    const countdownTotal =
-      activeSession.player_timer_seconds ?? typedTimerSeconds;
-    const remaining = countdownTotal - elapsedSeconds;
-    const bufferRemaining =
-      countdownTotal + activeSession.buffer_seconds - elapsedSeconds;
-    return getTimerStatus(remaining, bufferRemaining);
-  }, [activeSession, elapsedSeconds, typedTimerSeconds]);
-
-  const countdownTotal =
-    activeSession?.player_timer_seconds ?? typedTimerSeconds;
-  const remainingSeconds = activeSession
-    ? countdownTotal - elapsedSeconds
-    : countdownTotal;
-  const bufferRemainingSeconds = activeSession
-    ? countdownTotal + activeSession.buffer_seconds - elapsedSeconds
-    : defaultBufferSeconds;
-  const isInBufferTime =
-    Boolean(activeSession) && remainingSeconds <= 0 && bufferRemainingSeconds > 0;
   const canStartCooking = !activeSession && isOrderStartable(selectedOrder);
+  const showCameraDebug = cameraEnabled && cameraDebugEnabled;
 
   function selectOrder(order: CookingLookupData | null) {
     setSelectedOrder(order);
@@ -173,7 +145,6 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     setLatestSession(nextOrder?.latestCookingSession ?? null);
 
     if (nextOrder) {
-      setKeypadTarget("timer");
       console.log("[Cooking test] Selected order", {
         orderNo: nextOrder.order.orderNo,
         groupOrderId: nextOrder.groupOrder.id,
@@ -189,25 +160,13 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   function appendKeypadValue(value: string) {
     if (activeSessionRef.current) return;
 
-    if (keypadTarget === "order") {
-      selectOrderByNumber(`${orderNoInput}${value}`);
-      return;
-    }
-
-    setPlayerTimerSecondsInput((currentValue) =>
-      currentValue === "0" ? value : `${currentValue}${value}`,
-    );
+    selectOrderByNumber(`${orderNoInput}${value}`);
   }
 
   function backspaceKeypadValue() {
     if (activeSessionRef.current) return;
 
-    if (keypadTarget === "order") {
-      selectOrderByNumber(orderNoInput.slice(0, -1));
-      return;
-    }
-
-    setPlayerTimerSecondsInput((currentValue) => currentValue.slice(0, -1));
+    selectOrderByNumber(orderNoInput.slice(0, -1));
   }
 
   function clearKeypadValue() {
@@ -220,9 +179,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     setActiveSession(null);
     setLatestSession(null);
     setOrderNoInput("");
-    setPlayerTimerSecondsInput("");
-    setKeypadTarget("order");
-    setMessage("Station cleared. Enter the next order number and timer.");
+    setMessage("Station cleared. Enter the next order number.");
     setErrorMessage(null);
   }
 
@@ -249,8 +206,6 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           groupOrderId: entry.groupOrder.id,
           status: entry.groupOrder.status,
           requiredSeconds: entry.order.requiredTotalCookTimeSeconds,
-          playerTimerSeconds:
-            entry.activeCookingSession?.player_timer_seconds ?? null,
           actualSeconds: entry.latestCookingSession?.actual_seconds ?? null,
         })),
       );
@@ -271,14 +226,16 @@ export function CookingStationClient({ groupId, groupName }: Props) {
 
       if (nextSelectedOrder?.activeCookingSession) {
         setMessage(
-          "Existing active cooking session found. Timer will continue locally.",
+          "Existing active cooking session found. Stopwatch will continue locally.",
         );
       } else if (nextSelectedOrder) {
         setMessage(
-          "Order found. Enter your timer, then cover the camera to start cooking.",
+          cameraEnabled
+            ? "Order found. Cover the camera to start cooking."
+            : "Order found. Press Start to begin cooking.",
         );
       } else {
-        setMessage("Orders loaded. Enter an order number and timer to cook.");
+        setMessage("Orders loaded. Enter an order number to cook.");
       }
     } catch (error) {
       setErrorMessage(
@@ -304,20 +261,13 @@ export function CookingStationClient({ groupId, groupName }: Props) {
       return;
     }
 
-    const timerSeconds = Math.max(0, Math.floor(playerTimerSecondsRef.current));
-
-    if (!Number.isFinite(timerSeconds) || timerSeconds <= 0) {
-      setErrorMessage("Please enter a valid cooking timer first");
-      return;
-    }
-
     isStartingRef.current = true;
     setErrorMessage(null);
     setMessage(null);
     const optimisticSession: CookingSession = {
       id: `pending-${order.groupOrder.id}`,
       buffer_seconds: defaultBufferSeconds,
-      player_timer_seconds: timerSeconds,
+      player_timer_seconds: null,
       started_at: detectedAt.toISOString(),
       removed_at: null,
       actual_seconds: null,
@@ -358,7 +308,6 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             bufferSeconds: defaultBufferSeconds,
             detectedAt: detectedAt.toISOString(),
             groupId,
-            playerTimerSeconds: timerSeconds,
           }),
         },
       );
@@ -436,6 +385,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
     const session = activeSessionRef.current;
     if (!session || isStoppingRef.current) return;
 
+    const groupOrderId = selectedOrderRef.current?.groupOrder.id;
     isStoppingRef.current = true;
     setErrorMessage(null);
     setMessage(null);
@@ -458,11 +408,11 @@ export function CookingStationClient({ groupId, groupName }: Props) {
       }
 
       setActiveSession(null);
-      startSourceRef.current = "camera";
+      startSourceRef.current = cameraEnabled ? "camera" : "manual";
       setLatestSession(data.session);
       setOrders((currentOrders) =>
         currentOrders.map((currentOrder) =>
-          currentOrder.groupOrder.id === selectedOrderRef.current?.groupOrder.id
+          currentOrder.groupOrder.id === groupOrderId
             ? {
                 ...currentOrder,
                 groupOrder: {
@@ -476,6 +426,14 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             : currentOrder,
         ),
       );
+      void displayChannelRef.current?.send({
+        type: "broadcast",
+        event: "cooking-stopped",
+        payload: {
+          groupOrderId,
+          session: data.session,
+        },
+      });
       setMessage("Cooking stopped and saved.");
     } catch (error) {
       setErrorMessage(
@@ -541,12 +499,9 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           void loadGroupOrders({ quiet: true });
         },
       )
-      .subscribe((status) => {
-        setIsLive(status === "SUBSCRIBED");
-      });
+      .subscribe();
 
     return () => {
-      setIsLive(false);
       void supabase.removeChannel(channel);
     };
     // loadGroupOrders intentionally reads the latest selected order/input values.
@@ -554,6 +509,8 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   }, [groupId]);
 
   useEffect(() => {
+    if (!cameraEnabled) return;
+
     let mounted = true;
 
     async function startCamera() {
@@ -599,6 +556,8 @@ export function CookingStationClient({ groupId, groupName }: Props) {
   }, []);
 
   useEffect(() => {
+    if (!cameraEnabled) return;
+
     const tick = () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -652,7 +611,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           cameraCoveredRef.current = blocked;
           lastBrightnessRef.current = averageBrightness;
           const now = Date.now();
-          if (cameraDebugEnabled) {
+          if (showCameraDebug) {
             setCameraDebug((currentDebug) =>
               currentDebug.brightness === averageBrightness &&
               currentDebug.brightnessDelta === brightnessDelta &&
@@ -704,7 +663,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-    // The camera loop reads active order/session/timer values from refs.
+    // The camera loop reads active order/session values from refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -767,14 +726,24 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           width: 150px;
           height: 210px;
           margin-left: -75px;
-          background: linear-gradient(180deg, #fff4a8 0%, #f97316 48%, #dc2626 100%);
+          background: linear-gradient(
+            180deg,
+            #fff4a8 0%,
+            #f97316 48%,
+            #dc2626 100%
+          );
         }
 
         .flame-b {
           width: 96px;
           height: 150px;
           margin-left: -26px;
-          background: linear-gradient(180deg, #fff7cc 0%, #fb923c 62%, #ea580c 100%);
+          background: linear-gradient(
+            180deg,
+            #fff7cc 0%,
+            #fb923c 62%,
+            #ea580c 100%
+          );
           animation-delay: -0.24s;
         }
 
@@ -782,7 +751,12 @@ export function CookingStationClient({ groupId, groupName }: Props) {
           width: 86px;
           height: 132px;
           margin-left: -86px;
-          background: linear-gradient(180deg, #fed7aa 0%, #f97316 58%, #b91c1c 100%);
+          background: linear-gradient(
+            180deg,
+            #fed7aa 0%,
+            #f97316 58%,
+            #b91c1c 100%
+          );
           animation-delay: -0.42s;
         }
 
@@ -791,185 +765,21 @@ export function CookingStationClient({ groupId, groupName }: Props) {
         }
       `}</style>
 
-      <div className="mx-auto grid min-h-[calc(100dvh-1rem)] max-w-5xl grid-rows-[minmax(0,1fr)_auto] gap-2 sm:gap-4 lg:h-full lg:min-h-0">
-        <section className="order-2 rounded-2xl bg-white p-2 shadow-sm sm:rounded-3xl sm:p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium uppercase text-orange-600 sm:text-sm">
-                Cooking Station
-              </p>
-              <h1 className="text-xl font-black text-orange-950 sm:mt-1 sm:text-4xl">
-                {groupName}
-              </h1>
+      <div className="mx-auto flex min-h-[calc(100dvh-1rem)] max-w-5xl flex-col gap-2 sm:gap-4">
+        <section className="sticky top-2 z-20 rounded-2xl bg-white p-2 shadow-sm ring-1 ring-orange-100 sm:top-5 sm:rounded-3xl sm:p-4">
+          <div className="grid gap-2 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+            <div className="grid gap-2 sm:grid-cols-[220px_1fr] sm:items-end">
+              <div>
+                <p className="text-xs font-medium uppercase text-orange-600 sm:text-sm">
+                  Cooking Station
+                </p>
+                <h1 className="truncate text-xl font-black text-orange-950 sm:mt-1 sm:text-3xl">
+                  {groupName}
+                </h1>
+              </div>
             </div>
-
-            <div className="rounded-xl bg-orange-50 px-3 py-2 text-right sm:rounded-2xl sm:px-4 sm:py-3">
-              <p className="text-[11px] font-bold uppercase text-orange-700">
-                Live
-              </p>
-              <p className="text-xs font-black text-orange-950 sm:text-sm">
-                {isLive ? "Live" : "Connecting"}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-4">
-            <label
-              className={`rounded-xl border p-2 sm:rounded-2xl sm:p-4 ${
-                keypadTarget === "order"
-                  ? "border-orange-400 bg-orange-50"
-                  : "border-orange-100 bg-orange-50"
-              }`}
-            >
-              <span className="text-xs font-bold text-orange-900 sm:text-sm">
-                Order no.
-              </span>
-              <input
-                inputMode="numeric"
-                value={orderNoInput}
-                disabled={Boolean(activeSession)}
-                readOnly={useInlineKeypadOnly}
-                onChange={(event) =>
-                  selectOrderByNumber(event.target.value.replace(/\D/g, ""))
-                }
-                onFocus={() => setKeypadTarget("order")}
-                placeholder="Order no."
-                className="mt-1 h-12 w-full rounded-xl border border-orange-200 px-3 text-2xl font-black text-orange-950 outline-none transition focus:border-orange-500 disabled:bg-white/60 disabled:text-orange-950 sm:mt-2 sm:h-16 sm:px-4 sm:text-3xl"
-              />
-            </label>
-
-            <label
-              className={`rounded-xl border p-2 sm:rounded-2xl sm:p-4 ${
-                keypadTarget === "timer"
-                  ? "border-orange-400 bg-orange-50"
-                  : "border-orange-100 bg-orange-50"
-              }`}
-            >
-              <span className="text-xs font-bold text-orange-900 sm:text-sm">
-                Timer seconds
-              </span>
-              <input
-                inputMode="numeric"
-                value={playerTimerSecondsInput}
-                disabled={Boolean(activeSession)}
-                readOnly={useInlineKeypadOnly}
-                onChange={(event) =>
-                  setPlayerTimerSecondsInput(
-                    event.target.value.replace(/\D/g, ""),
-                  )
-                }
-                onFocus={() => setKeypadTarget("timer")}
-                placeholder="Seconds"
-                className="mt-1 h-12 w-full rounded-xl border border-orange-200 px-3 text-2xl font-black text-orange-950 outline-none transition focus:border-orange-500 disabled:bg-white/60 disabled:text-orange-950 sm:mt-2 sm:h-16 sm:px-4 sm:text-3xl"
-              />
-            </label>
-          </div>
-
-          <div className="mt-2 grid grid-cols-[1fr_auto] gap-2 sm:mt-3 sm:gap-3">
-            <div className="grid grid-cols-4 gap-2">
-              {KEYPAD_VALUES.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => appendKeypadValue(value)}
-                  disabled={Boolean(activeSession)}
-                  className="min-h-11 rounded-xl bg-orange-100 text-lg font-black text-orange-950 transition hover:bg-orange-200 sm:min-h-12"
-                >
-                  {value}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => appendKeypadValue("0")}
-                disabled={Boolean(activeSession)}
-                className="min-h-11 rounded-xl bg-orange-100 text-lg font-black text-orange-950 transition hover:bg-orange-200 sm:min-h-12"
-              >
-                0
-              </button>
-              <button
-                type="button"
-                onClick={backspaceKeypadValue}
-                disabled={Boolean(activeSession)}
-                className="min-h-11 rounded-xl bg-slate-100 text-base font-black text-slate-950 transition hover:bg-slate-200 sm:min-h-12 sm:text-lg"
-              >
-                Del
-              </button>
-              <button
-                type="button"
-                onClick={clearKeypadValue}
-                className="min-h-11 rounded-xl bg-slate-900 text-base font-black text-white transition hover:bg-slate-700 sm:min-h-12 sm:text-lg"
-              >
-                Clear
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                keypadTarget === "order"
-                  ? setKeypadTarget("timer")
-                  : setKeypadTarget("order")
-              }
-              disabled={Boolean(activeSession)}
-              className="min-h-11 rounded-xl bg-white px-3 text-xs font-black text-orange-900 ring-1 ring-orange-200 transition hover:bg-orange-50 sm:min-h-12 sm:px-4 sm:text-sm"
-            >
-              {keypadTarget === "order" ? "Timer" : "Order"}
-            </button>
-          </div>
-
-          <div className="mt-2 grid grid-cols-3 gap-2 sm:mt-4 sm:gap-3">
-            <div className="rounded-xl bg-slate-50 p-2 sm:rounded-2xl sm:p-4">
-              <p className="text-[11px] font-bold text-slate-700 sm:text-sm">
-                Orders
-              </p>
-              <p className="text-xl font-black text-slate-950 sm:text-3xl">
-                {orders.length}
-              </p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-2 sm:rounded-2xl sm:p-4">
-              <p className="text-[11px] font-bold text-slate-700 sm:text-sm">
-                Selected
-              </p>
-              <p className="text-xl font-black text-slate-950 sm:text-3xl">
-                {selectedOrder ? `#${selectedOrder.order.orderNo}` : "--"}
-              </p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-2 sm:rounded-2xl sm:p-4">
-              <p className="text-[11px] font-bold text-slate-700 sm:text-sm">
-                Timer
-              </p>
-              <p className="text-xl font-black text-slate-950 sm:text-3xl">
-                {formatDecimalSeconds(remainingSeconds)}
-              </p>
-            </div>
-          </div>
-
-          {errorMessage && (
-            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700 sm:mt-5 sm:rounded-2xl sm:p-4">
-              {errorMessage}
-            </div>
-          )}
-
-          {message && (
-            <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm font-medium text-orange-800 sm:mt-5 sm:rounded-2xl sm:p-4">
-              {message}
-            </div>
-          )}
-        </section>
-
-        <section className="order-1 min-h-0 rounded-2xl bg-white p-2 shadow-sm sm:rounded-3xl sm:p-5">
-          {!cameraDebugEnabled && (
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              className="pointer-events-none absolute h-px w-px opacity-0"
-            />
-          )}
-          <canvas ref={canvasRef} className="hidden" />
-
-          <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2 sm:gap-3 lg:grid-cols-[1fr_280px] lg:grid-rows-1 lg:gap-6">
             <div
-              className={`relative min-h-0 overflow-hidden rounded-2xl border sm:rounded-3xl ${
+              className={`relative min-h-[240px] overflow-hidden rounded-2xl border sm:min-h-[360px] sm:rounded-3xl ${
                 activeSession
                   ? "border-orange-200 bg-orange-950"
                   : "border-orange-100 bg-orange-50"
@@ -982,42 +792,73 @@ export function CookingStationClient({ groupId, groupName }: Props) {
                   <div className="flame flame-a" />
                   <div className="flame flame-b" />
                   <div className="flame flame-c" />
-                  <div className="relative z-10 flex h-full min-h-[170px] flex-col items-center justify-center p-4 text-center text-white sm:min-h-[360px] sm:p-8">
+                  <div className="relative z-10 flex h-full min-h-[240px] flex-col items-center justify-center p-4 text-center text-white sm:min-h-[360px] sm:p-8">
                     <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-200 sm:text-sm">
                       Cooking
                     </p>
-                    <p className="mt-1 text-[clamp(3rem,16vw,4.8rem)] font-black sm:mt-4 sm:text-7xl">
-                      {formatDecimalSeconds(remainingSeconds)}
-                    </p>
-                    <p className="mt-1 text-lg font-bold sm:mt-3 sm:text-2xl">
-                      {isInBufferTime
-                        ? `Buffer: ${formatDecimalSeconds(bufferRemainingSeconds)}`
-                        : timerStatus}
+                    <p className="mt-1 text-[clamp(4rem,18vw,7rem)] font-black tabular-nums sm:mt-4">
+                      {formatDecimalSeconds(elapsedSeconds)}
                     </p>
                   </div>
                 </>
               ) : (
-                <div className="flex h-full min-h-[170px] flex-col items-center justify-center p-4 text-center sm:min-h-[360px] sm:p-8">
+                <div className="flex h-full min-h-[240px] flex-col items-center justify-center p-4 text-center sm:min-h-[360px] sm:p-8">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-600 sm:text-sm">
                     Ready
                   </p>
                   <p className="mt-1 text-2xl font-black text-orange-950 sm:mt-4 sm:text-5xl">
                     {selectedOrder && !canStartCooking
                       ? "Order already cooked"
-                      : "Cover camera to start"}
+                      : cameraEnabled
+                        ? "Cover camera to start"
+                        : "Press Start to cook"}
                   </p>
                   <p className="mt-1 max-w-md text-xs text-orange-800 sm:mt-3 sm:text-base">
                     {selectedOrder && !canStartCooking
                       ? "Press Clear, then enter another order."
-                      : "Enter the order number and timer first. Uncover the camera when cooking is done."}
+                      : cameraEnabled
+                        ? "Enter the order number first. Uncover the camera when cooking is done."
+                        : "Enter the order number first. Press Stop when cooking is done."}
                   </p>
                 </div>
               )}
             </div>
+            <div className="grid grid-cols-2 gap-2 lg:min-w-60">
+              <button
+                type="button"
+                onClick={() => startCooking(new Date(), "manual")}
+                disabled={!canStartCooking}
+                className="min-h-14 rounded-xl bg-orange-600 px-5 text-lg font-black text-white transition hover:bg-orange-700 disabled:opacity-50 sm:rounded-2xl"
+              >
+                Start
+              </button>
+              <button
+                type="button"
+                onClick={() => stopCooking()}
+                disabled={!activeSession}
+                className="min-h-14 rounded-xl bg-red-600 px-5 text-lg font-black text-white transition hover:bg-red-700 disabled:opacity-50 sm:rounded-2xl"
+              >
+                Stop
+              </button>
+            </div>
+          </div>
+        </section>
 
-            <div className="grid grid-cols-2 content-start gap-2 sm:gap-3 lg:grid-cols-1">
-              {cameraDebugEnabled && (
-                <div className="col-span-2 rounded-xl bg-slate-50 p-3 text-slate-950 ring-1 ring-slate-200 lg:col-span-1">
+        <section className="rounded-2xl bg-white p-2 shadow-sm sm:rounded-3xl sm:p-5">
+          {cameraEnabled && !showCameraDebug && (
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              className="pointer-events-none absolute h-px w-px opacity-0"
+            />
+          )}
+          {cameraEnabled && <canvas ref={canvasRef} className="hidden" />}
+
+          <div className="grid gap-2 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="grid content-start gap-2 sm:gap-3">
+              {showCameraDebug && (
+                <div className="rounded-xl bg-slate-50 p-3 text-slate-950 ring-1 ring-slate-200">
                   <video
                     ref={videoRef}
                     playsInline
@@ -1073,26 +914,61 @@ export function CookingStationClient({ groupId, groupName }: Props) {
                   </div>
                 </div>
               )}
-
-              <button
-                type="button"
-                onClick={() => startCooking(new Date(), "manual")}
-                disabled={!canStartCooking}
-                className="min-h-12 rounded-xl bg-orange-600 px-5 font-bold text-white transition hover:bg-orange-700 disabled:opacity-50 sm:rounded-2xl sm:py-4"
-              >
-                Start
-              </button>
-              <button
-                type="button"
-                onClick={() => stopCooking()}
-                disabled={!activeSession}
-                className="min-h-12 rounded-xl bg-red-600 px-5 font-bold text-white transition hover:bg-red-700 disabled:opacity-50 sm:rounded-2xl sm:py-4"
-              >
-                Stop
-              </button>
+              <label className="block">
+                <span className="text-xs font-bold text-orange-900 sm:text-sm">
+                  Order no.
+                </span>
+                <input
+                  inputMode="numeric"
+                  value={orderNoInput}
+                  disabled={Boolean(activeSession)}
+                  readOnly={useInlineKeypadOnly}
+                  onChange={(event) =>
+                    selectOrderByNumber(event.target.value.replace(/\D/g, ""))
+                  }
+                  placeholder="Order no."
+                  className="mt-1 h-12 w-full rounded-xl border border-orange-200 px-3 text-2xl font-black text-orange-950 outline-none transition focus:border-orange-500 disabled:bg-white/60 disabled:text-orange-950 sm:h-14 sm:text-3xl"
+                />
+              </label>
+              <div className="grid grid-cols-4 gap-2 sm:gap-3 lg:grid-cols-3">
+                {KEYPAD_VALUES.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => appendKeypadValue(value)}
+                    disabled={Boolean(activeSession)}
+                    className="min-h-14 rounded-xl bg-orange-100 text-xl font-black text-orange-950 transition hover:bg-orange-200 disabled:opacity-50"
+                  >
+                    {value}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => appendKeypadValue("0")}
+                  disabled={Boolean(activeSession)}
+                  className="min-h-14 rounded-xl bg-orange-100 text-xl font-black text-orange-950 transition hover:bg-orange-200 disabled:opacity-50"
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  onClick={backspaceKeypadValue}
+                  disabled={Boolean(activeSession)}
+                  className="min-h-14 rounded-xl bg-slate-100 text-base font-black text-slate-950 transition hover:bg-slate-200 disabled:opacity-50"
+                >
+                  Del
+                </button>
+                <button
+                  type="button"
+                  onClick={clearKeypadValue}
+                  className="min-h-14 rounded-xl bg-slate-900 text-base font-black text-white transition hover:bg-slate-700"
+                >
+                  Clear
+                </button>
+              </div>
 
               {latestSession && latestSession.result !== "pending" && (
-                <div className="col-span-2 rounded-xl bg-slate-50 p-3 lg:col-span-1">
+                <div className="rounded-xl bg-slate-50 p-3">
                   <p className="text-xs font-bold text-slate-700 sm:text-sm">
                     Last Cook Time
                   </p>
@@ -1104,6 +980,22 @@ export function CookingStationClient({ groupId, groupName }: Props) {
             </div>
           </div>
         </section>
+
+        {(errorMessage || message) && (
+          <section className="rounded-2xl bg-white p-2 shadow-sm sm:rounded-3xl sm:p-4">
+            {errorMessage && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700 sm:rounded-2xl sm:p-4">
+                {errorMessage}
+              </div>
+            )}
+
+            {message && (
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm font-medium text-orange-800 sm:rounded-2xl sm:p-4">
+                {message}
+              </div>
+            )}
+          </section>
+        )}
       </div>
     </main>
   );

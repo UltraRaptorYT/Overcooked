@@ -19,10 +19,36 @@ type EffectiveDecision = {
   reason?: string | null;
 };
 
-function getScorePayload(decision: JudgeBody["decision"]) {
+type RoundTiming = {
+  status: string;
+  duration_seconds: number;
+  rush_hour_duration_seconds: number | null;
+  round_started_at: string | null;
+};
+
+function isRushHourActive(round: RoundTiming, judgedAt: Date) {
+  if (round.status !== "playing" || !round.round_started_at) return false;
+
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor(
+      (judgedAt.getTime() - new Date(round.round_started_at).getTime()) /
+        1000,
+    ),
+  );
+  const remainingSeconds = Math.max(0, round.duration_seconds - elapsedSeconds);
+  const rushHourSeconds = round.rush_hour_duration_seconds ?? 5 * 60;
+
+  return remainingSeconds > 0 && remainingSeconds <= rushHourSeconds;
+}
+
+function getScorePayload(
+  decision: JudgeBody["decision"],
+  rushHourActive: boolean,
+) {
   if (decision === "approved") {
     return {
-      points_delta: 10,
+      points_delta: rushHourActive ? 20 : 10,
       red_tokens_delta: 1,
     };
   }
@@ -98,7 +124,7 @@ export async function POST(request: Request, context: JudgeContext) {
 
   const { data: groupOrder, error: groupOrderError } = await judgeSupabase
     .from(JudgeT.groupOrders)
-    .select("id, group_id, order_template_id, status")
+    .select("id, group_id, order_template_id, round_id, status")
     .eq("id", groupOrderId)
     .single();
 
@@ -133,6 +159,21 @@ export async function POST(request: Request, context: JudgeContext) {
     );
   }
 
+  const { data: round, error: roundError } = await judgeSupabase
+    .from(JudgeT.rounds)
+    .select(
+      "status, duration_seconds, rush_hour_duration_seconds, round_started_at",
+    )
+    .eq("id", groupOrder.round_id)
+    .single();
+
+  if (roundError || !round) {
+    return JudgeNextResponse.json(
+      { error: roundError?.message ?? "Round not found" },
+      { status: 404 },
+    );
+  }
+
   const { data: latestCookingSession, error: cookingSessionError } =
     await judgeSupabase
       .from(JudgeT.cookingSessions)
@@ -155,7 +196,12 @@ export async function POST(request: Request, context: JudgeContext) {
     latestCookingSession?.result ?? null,
     body.reason,
   );
-  const scorePayload = getScorePayload(effectiveDecision.decision);
+  const judgedAt = new Date();
+  const rushHourActive = isRushHourActive(round, judgedAt);
+  const scorePayload = getScorePayload(
+    effectiveDecision.decision,
+    rushHourActive,
+  );
 
   const { data: servedOrder, error: insertError } = await judgeSupabase
     .from(JudgeT.servedOrders)
@@ -165,7 +211,7 @@ export async function POST(request: Request, context: JudgeContext) {
       served_by_group_id: groupOrder.group_id,
       decision: effectiveDecision.decision,
       reason: effectiveDecision.reason ?? null,
-      judged_at: new Date().toISOString(),
+      judged_at: judgedAt.toISOString(),
       ...scorePayload,
     })
     .select("id, decision, reason, points_delta, red_tokens_delta")
@@ -178,5 +224,11 @@ export async function POST(request: Request, context: JudgeContext) {
     );
   }
 
-  return JudgeNextResponse.json({ servedOrder });
+  return JudgeNextResponse.json({
+    servedOrder: {
+      ...servedOrder,
+      rush_hour_multiplier:
+        servedOrder.decision === "approved" && rushHourActive ? 2 : 1,
+    },
+  });
 }

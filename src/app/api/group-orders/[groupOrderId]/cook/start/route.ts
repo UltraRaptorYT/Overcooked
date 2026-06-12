@@ -13,7 +13,6 @@ type StartCookBody = {
   bufferSeconds?: number;
   groupId?: string;
   detectedAt?: string;
-  playerTimerSeconds?: number;
 };
 
 const STARTABLE_ORDER_STATUSES = ["assigned", "assembling"] as const;
@@ -37,20 +36,8 @@ export async function POST(request: Request, context: StartCookContext) {
   const { groupOrderId } = await context.params;
   const body = (await request.json().catch(() => ({}))) as StartCookBody;
   const groupId = body.groupId;
-  const playerTimerSeconds = body.playerTimerSeconds;
   const bufferSeconds =
     body.bufferSeconds ?? OVERCOOKED_26_CONFIG.cooking.defaultBufferSeconds;
-
-  if (
-    typeof playerTimerSeconds !== "number" ||
-    !Number.isFinite(playerTimerSeconds) ||
-    playerTimerSeconds <= 0
-  ) {
-    return StartCookNextResponse.json(
-      { error: "Please enter a valid cooking timer first" },
-      { status: 400 },
-    );
-  }
 
   if (!groupOrderId) {
     return StartCookNextResponse.json(
@@ -134,7 +121,7 @@ export async function POST(request: Request, context: StartCookContext) {
       group_id: groupOrder.group_id,
       required_seconds: requiredSeconds, // hidden actual answer
       buffer_seconds: bufferSeconds,
-      player_timer_seconds: playerTimerSeconds, // kids' typed timer
+      player_timer_seconds: null,
       started_at: startedAt,
       result: requiredSeconds === 0 ? "not_required" : "pending",
     })

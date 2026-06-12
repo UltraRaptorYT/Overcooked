@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
+import supabase from "@/lib/supabase";
+import { OVERCOOKED_26_TABLES as T } from "@/lib/overcooked-26/tables";
+import { useEffect, useMemo, useState } from "react";
 
 type LookupData = {
   customer: {
@@ -67,11 +70,28 @@ type Props = {
   customerSlot: number;
 };
 
+type SelectableOrder = {
+  groupOrderId: string;
+  orderNo: string;
+  status: string;
+  assignedAt: string;
+  groupName: string;
+  belongsToThisCustomer: boolean;
+};
+
+type RoundTiming = {
+  status: string;
+  duration_seconds: number;
+  rush_hour_duration_seconds: number;
+  round_started_at: string | null;
+};
+
 const REJECT_REASONS = [
   "wrong_item",
   "wrong_colour",
   "wrong_zone",
   "missing_item",
+  "not_cooked",
   "overcooked",
   "undercooked",
   "messy_or_unclear",
@@ -80,12 +100,17 @@ const REJECT_REASONS = [
 const FOOD_IMAGE_FILTERS: Record<string, string> = {
   red: "sepia(0.9) saturate(4) hue-rotate(315deg) brightness(0.95)",
   blue: "sepia(0.8) saturate(3.8) hue-rotate(175deg) brightness(0.9)",
-  green: "sepia(0.8) saturate(3.5) hue-rotate(70deg) brightness(0.9)",
+  "light green": "sepia(0.75) saturate(2.8) hue-rotate(65deg) brightness(1.08)",
+  "dark green": "sepia(0.9) saturate(3.7) hue-rotate(75deg) brightness(0.68)",
   yellow: "sepia(0.9) saturate(3.5) hue-rotate(5deg) brightness(1.05)",
   purple: "sepia(0.75) saturate(3.2) hue-rotate(230deg) brightness(0.9)",
   pink: "sepia(0.75) saturate(2.8) hue-rotate(300deg) brightness(1.05)",
   brown: "sepia(0.9) saturate(1.6) hue-rotate(345deg) brightness(0.75)",
   orange: "sepia(0.9) saturate(3.5) hue-rotate(335deg) brightness(1)",
+  white: "grayscale(1) brightness(1.35) contrast(0.85)",
+  black: "grayscale(1) brightness(0.18) contrast(1.4)",
+  "light blue": "sepia(0.6) saturate(2.4) hue-rotate(165deg) brightness(1.15)",
+  beige: "sepia(0.65) saturate(1.2) hue-rotate(350deg) brightness(1.08)",
 };
 
 function formatReason(reason: string) {
@@ -123,12 +148,17 @@ export function CustomerDashboardClient({
   customerSlot,
 }: Props) {
   const [orderNo, setOrderNo] = useState("");
+  const [selectableOrders, setSelectableOrders] = useState<SelectableOrder[]>(
+    [],
+  );
   const [lookupData, setLookupData] = useState<LookupData | null>(null);
   const [selectedRejectReason, setSelectedRejectReason] =
     useState<string>("wrong_item");
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [roundTiming, setRoundTiming] = useState<RoundTiming | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const itemsByZone = useMemo(() => {
     const grouped: Record<string, LookupData["items"]> = {
@@ -151,15 +181,72 @@ export function CustomerDashboardClient({
     lookupData.cookingSession?.result === "correct";
   const cookingHasFailed = Boolean(lookupData) && !cookingCanPass;
   const cookingFailReason = getCookingFailReason(lookupData);
+  const rushHourActive = useMemo(() => {
+    if (
+      !roundTiming ||
+      roundTiming.status !== "playing" ||
+      !roundTiming.round_started_at
+    ) {
+      return false;
+    }
 
-  async function handleLookup() {
-    const cleanedOrderNo = orderNo.trim();
+    const elapsedSeconds = Math.max(
+      0,
+      Math.floor(
+        (now - new Date(roundTiming.round_started_at).getTime()) / 1000,
+      ),
+    );
+    const remainingSeconds = Math.max(
+      0,
+      roundTiming.duration_seconds - elapsedSeconds,
+    );
+
+    return (
+      remainingSeconds > 0 &&
+      remainingSeconds <= roundTiming.rush_hour_duration_seconds
+    );
+  }, [now, roundTiming]);
+  const approvalPoints = rushHourActive ? 20 : 10;
+
+  async function loadSelectableOrders() {
+    try {
+      const response = await fetch(`/api/customers/${customerId}/orders`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to load orders");
+      }
+
+      setSelectableOrders(data.orders ?? []);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Something went wrong",
+      );
+    }
+  }
+
+  async function loadRoundTiming() {
+    try {
+      const response = await fetch("/api/display");
+      const data = await response.json();
+
+      if (!response.ok) return;
+
+      setRoundTiming(data.currentRound ?? null);
+    } catch {
+      // The judge API still calculates the real score if this helper refresh fails.
+    }
+  }
+
+  async function handleLookup(nextOrderNo = orderNo) {
+    const cleanedOrderNo = nextOrderNo.trim();
 
     if (!cleanedOrderNo) {
-      setErrorMessage("Enter an order number first");
+      setErrorMessage("Choose an order first");
       return;
     }
 
+    setOrderNo(cleanedOrderNo);
     setIsLoading(true);
     setErrorMessage(null);
     setMessage(null);
@@ -180,6 +267,7 @@ export function CustomerDashboardClient({
       if (nextCookingFailReason) {
         setSelectedRejectReason(nextCookingFailReason);
       }
+      void loadSelectableOrders();
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong",
@@ -224,14 +312,17 @@ export function CustomerDashboardClient({
       const points = data.servedOrder.points_delta;
       const tokens = data.servedOrder.red_tokens_delta;
       const finalDecision = data.servedOrder.decision;
+      const rushHourLabel =
+        data.servedOrder.rush_hour_multiplier === 2 ? " (Rush Hour x2)" : "";
 
       setMessage(
         finalDecision === "approved"
-          ? `Approved. +${points} points, +${tokens} red token.`
+          ? `Approved. +${points} points${rushHourLabel}, +${tokens} red token.`
           : `Rejected. ${points} points, +${tokens} red token.`,
       );
       setLookupData(null);
       setOrderNo("");
+      void loadSelectableOrders();
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong",
@@ -240,6 +331,68 @@ export function CustomerDashboardClient({
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    void loadSelectableOrders();
+    void loadRoundTiming();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (cookingFailReason) {
+      setSelectedRejectReason(cookingFailReason);
+    }
+  }, [cookingFailReason]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`customer-orders-${customerId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: T.groupOrders,
+        },
+        () => {
+          void loadSelectableOrders();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: T.rounds,
+        },
+        () => {
+          void loadRoundTiming();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: T.cookingSessions,
+        },
+        () => {
+          void loadSelectableOrders();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+    // loadSelectableOrders intentionally uses latest customerId from this render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
 
   return (
     <main className="min-h-screen bg-emerald-50 p-5">
@@ -253,26 +406,63 @@ export function CustomerDashboardClient({
           </h1>
           <p className="mt-1 text-emerald-800">Customer slot {customerSlot}</p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <input
-              value={orderNo}
-              onChange={(event) => setOrderNo(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  handleLookup();
-                }
-              }}
-              placeholder="Enter order number"
-              className="min-h-14 flex-1 rounded-2xl border border-emerald-200 bg-white px-5 text-xl font-semibold outline-none transition focus:border-emerald-500"
-            />
-            <button
-              type="button"
-              onClick={handleLookup}
-              disabled={isLoading}
-              className="rounded-2xl bg-emerald-600 px-8 py-4 text-lg font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {isLoading ? "Checking..." : "Find Order"}
-            </button>
+          <div className="mt-8">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-emerald-600">
+                Choose Order
+              </p>
+              <button
+                type="button"
+                onClick={() => loadSelectableOrders()}
+                disabled={isLoading}
+                className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-bold text-emerald-900 transition hover:bg-emerald-50 disabled:opacity-50"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {selectableOrders.length === 0 ? (
+              <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 font-semibold text-emerald-800">
+                No active orders yet.
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {selectableOrders.map((order) => (
+                  <button
+                    key={order.groupOrderId}
+                    type="button"
+                    onClick={() => handleLookup(order.orderNo)}
+                    disabled={isLoading}
+                    className={`rounded-2xl border p-4 text-left transition disabled:opacity-50 ${
+                      orderNo === order.orderNo
+                        ? "border-emerald-500 bg-emerald-100"
+                        : "border-emerald-100 bg-emerald-50 hover:bg-emerald-100"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-2xl font-black text-emerald-950">
+                        #{order.orderNo}
+                      </p>
+                      <span
+                        className={`rounded-full px-2 py-1 text-[11px] font-black uppercase ${
+                          order.belongsToThisCustomer
+                            ? "bg-emerald-600 text-white"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {order.belongsToThisCustomer ? "Mine" : "Not mine"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm font-bold text-emerald-800">
+                      {order.groupName}
+                    </p>
+                    <p className="text-xs font-semibold uppercase text-emerald-600">
+                      {order.status}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {errorMessage && (
@@ -393,39 +583,50 @@ export function CustomerDashboardClient({
               <h3 className="text-lg font-black text-amber-950">
                 Cooking Check
               </h3>
-              <p className="mt-1 text-amber-800">
-                Required total cooking time:{" "}
-                {lookupData.order.requiredTotalCookTimeSeconds}s
-              </p>
-              <p className="mt-1 text-amber-800">
-                Cooked for:{" "}
-                {lookupData.cookingSession?.actual_seconds != null
-                  ? `${lookupData.cookingSession.actual_seconds}s`
-                  : "not recorded yet"}
-              </p>
-              {cookingHasFailed && (
-                <p className="mt-3 rounded-2xl bg-red-100 px-4 py-3 font-black text-red-800">
-                  Order fail
-                  {cookingFailReason
-                    ? `: ${formatReason(cookingFailReason)}`
-                    : ""}
-                </p>
-              )}
+              <div className="flex items-center">
+                <div>
+                  <p className="mt-1 text-amber-800">
+                    Required total cooking time:{" "}
+                    {lookupData.order.requiredTotalCookTimeSeconds}s
+                  </p>
+                  <p className="mt-1 text-amber-800">
+                    Cooked for:{" "}
+                    {lookupData.cookingSession?.actual_seconds != null
+                      ? `${lookupData.cookingSession.actual_seconds}s`
+                      : "not recorded yet"}
+                  </p>
+                  {cookingHasFailed && (
+                    <p className="mt-3 rounded-2xl bg-red-100 px-4 py-3 font-black text-red-800">
+                      Order fail
+                      {cookingFailReason
+                        ? `: ${formatReason(cookingFailReason)}`
+                        : ""}
+                    </p>
+                  )}
+                </div>
+                <div
+                  className={cn(
+                    "ml-auto text-2xl",
+                    cookingHasFailed ? "text-red-600" : "text-emerald-600",
+                  )}
+                >
+                  {cookingHasFailed ? "Failed" : "Passed"}
+                </div>
+              </div>
             </div>
 
             <div className="mt-6 grid gap-3 md:grid-cols-3">
               {lookupData.order.belongsToThisCustomer ? (
                 <>
                   {cookingCanPass ? (
-                  <button
-                    type="button"
-                    onClick={() => judgeOrder("approved")}
-                    disabled={isLoading || !cookingCanPass}
-                    className="rounded-2xl bg-emerald-600 px-6 py-5 text-xl font-black text-white transition hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-600"
-                  >
-                    ✅ Approve +10
-                  </button>
-
+                    <button
+                      type="button"
+                      onClick={() => judgeOrder("approved")}
+                      disabled={isLoading || !cookingCanPass}
+                      className="rounded-2xl bg-emerald-600 px-6 py-5 text-xl font-black text-white transition hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-600"
+                    >
+                      Approve +{approvalPoints}
+                    </button>
                   ) : (
                     <button
                       type="button"
@@ -463,7 +664,7 @@ export function CustomerDashboardClient({
                       disabled={isLoading}
                       className="w-full rounded-2xl bg-red-600 px-6 py-4 text-lg font-black text-white transition hover:bg-red-700 disabled:opacity-50"
                     >
-                      ❌ Reject -20
+                      Reject -20
                     </button>
                   </div>
                 </>

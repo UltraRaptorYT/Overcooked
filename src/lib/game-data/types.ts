@@ -1,6 +1,24 @@
 export type Zone = "A" | "B" | "C" | "D";
 export type Difficulty = "easy" | "hard";
 
+export const FOOD_COLOURS = [
+  "light green",
+  "purple",
+  "orange",
+  "pink",
+  "white",
+  "red",
+  "yellow",
+  "blue",
+  "dark green",
+  "black",
+  "brown",
+  "light blue",
+  "beige",
+] as const;
+
+export type FoodColour = (typeof FOOD_COLOURS)[number];
+
 export type FoodItem = {
   id: string;
   name: string;
@@ -12,7 +30,7 @@ export type FoodItem = {
 export type OrderItem = {
   zone: Zone;
   foodItemId: string;
-  colour: string;
+  colour: FoodColour;
   sequence?: number;
   parentItem?: string;
 };
@@ -28,13 +46,4 @@ export type OrderTemplate = {
 
 export const ZONES: Zone[] = ["A", "B", "C", "D"];
 
-export const PLACEHOLDER_COLOURS = [
-  "red",
-  "blue",
-  "green",
-  "yellow",
-  "purple",
-  "pink",
-  "brown",
-  "orange",
-] as const;
+export const PLACEHOLDER_COLOURS = FOOD_COLOURS;

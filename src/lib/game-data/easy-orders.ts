@@ -17,10 +17,10 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 2,
     spokenText:
-      "Order number 7 3 1 6. I want a blue star candy at zone \"B\" and a green strawberry at zone \"D\".",
+      "Order number 7 3 1 6. I want a blue star candy at zone \"B\" and a dark green strawberry at zone \"D\".",
     items: [
       { zone: "B", foodItemId: "star_candy", colour: "blue" },
-      { zone: "D", foodItemId: "strawberry", colour: "green" },
+      { zone: "D", foodItemId: "strawberry", colour: "dark green" },
     ],
   },
   {
@@ -28,9 +28,9 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 3,
     spokenText:
-      "Order number 2 0 5 8. I want orange cheese at zone \"C\" and a purple heart candy at zone \"A\".",
+      "Order number 2 0 5 8. I want beige cheese at zone \"C\" and a purple heart candy at zone \"A\".",
     items: [
-      { zone: "C", foodItemId: "cheese", colour: "orange" },
+      { zone: "C", foodItemId: "cheese", colour: "beige" },
       { zone: "A", foodItemId: "heart_candy", colour: "purple" },
     ],
   },
@@ -39,12 +39,12 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 4,
     spokenText:
-      "Order number 9 1 4 3. I want yellow corn at zone \"A\", red tomato at zone \"B\", blue round candy at zone \"C\", and green cheese at zone \"D\".",
+      "Order number 9 1 4 3. I want yellow corn at zone \"A\", red tomato at zone \"B\", blue round candy at zone \"C\", and light green cheese at zone \"D\".",
     items: [
       { zone: "A", foodItemId: "corn", colour: "yellow" },
       { zone: "B", foodItemId: "tomato", colour: "red" },
       { zone: "C", foodItemId: "round_candy", colour: "blue" },
-      { zone: "D", foodItemId: "cheese", colour: "green" },
+      { zone: "D", foodItemId: "cheese", colour: "light green" },
     ],
   },
   {
@@ -52,10 +52,10 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 5,
     spokenText:
-      "Order number 3 6 7 1. I want a red triangle popsicle at zone \"C\" and a green heart candy at zone \"A\".",
+      "Order number 3 6 7 1. I want a red triangle popsicle at zone \"C\" and a light green heart candy at zone \"A\".",
     items: [
       { zone: "C", foodItemId: "triangle_popsicle", colour: "red" },
-      { zone: "A", foodItemId: "heart_candy", colour: "green" },
+      { zone: "A", foodItemId: "heart_candy", colour: "light green" },
     ],
   },
   {
@@ -74,9 +74,9 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 1,
     spokenText:
-      "Order number 1 9 4 7. I want green capsicum at zone \"B\" and a pink spiral candy at zone \"C\".",
+      "Order number 1 9 4 7. I want dark green capsicum at zone \"B\" and a pink spiral candy at zone \"C\".",
     items: [
-      { zone: "B", foodItemId: "capsicum", colour: "green" },
+      { zone: "B", foodItemId: "capsicum", colour: "dark green" },
       { zone: "C", foodItemId: "spiral_candy", colour: "pink" },
     ],
   },
@@ -85,9 +85,9 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 2,
     spokenText:
-      "Order number 6 2 0 5. I want a brown jellybean bear at zone \"A\" and red fries at zone \"B\".",
+      "Order number 6 2 0 5. I want a black jellybean bear at zone \"A\" and red fries at zone \"B\".",
     items: [
-      { zone: "A", foodItemId: "jellybean_bear", colour: "brown" },
+      { zone: "A", foodItemId: "jellybean_bear", colour: "black" },
       { zone: "B", foodItemId: "fries", colour: "red" },
     ],
   },
@@ -96,9 +96,9 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 3,
     spokenText:
-      "Order number 7 4 8 1. I want blue carrot at zone \"D\", yellow cheese at zone \"B\", and red heart candy at zone \"A\".",
+      "Order number 7 4 8 1. I want light blue carrot at zone \"D\", yellow cheese at zone \"B\", and red heart candy at zone \"A\".",
     items: [
-      { zone: "D", foodItemId: "carrot", colour: "blue" },
+      { zone: "D", foodItemId: "carrot", colour: "light blue" },
       { zone: "B", foodItemId: "cheese", colour: "yellow" },
       { zone: "A", foodItemId: "heart_candy", colour: "red" },
     ],
@@ -119,9 +119,9 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 5,
     spokenText:
-      "Order number 5 7 3 8. I want pink cauliflower at zone \"C\" and yellow star candy at zone \"D\".",
+      "Order number 5 7 3 8. I want white cauliflower at zone \"C\" and yellow star candy at zone \"D\".",
     items: [
-      { zone: "C", foodItemId: "cauliflower", colour: "pink" },
+      { zone: "C", foodItemId: "cauliflower", colour: "white" },
       { zone: "D", foodItemId: "star_candy", colour: "yellow" },
     ],
   },
@@ -130,9 +130,9 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 6,
     spokenText:
-      "Order number 8 2 6 0. I want green corn at zone \"A\", blue tomato at zone \"C\", and yellow star candy at zone \"D\".",
+      "Order number 8 2 6 0. I want light green corn at zone \"A\", blue tomato at zone \"C\", and yellow star candy at zone \"D\".",
     items: [
-      { zone: "A", foodItemId: "corn", colour: "green" },
+      { zone: "A", foodItemId: "corn", colour: "light green" },
       { zone: "C", foodItemId: "tomato", colour: "blue" },
       { zone: "D", foodItemId: "star_candy", colour: "yellow" },
     ],
@@ -164,10 +164,10 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 3,
     spokenText:
-      "Order number 9 3 7 5. I want purple fries at zone \"A\" and green rectangular candy at zone \"D\".",
+      "Order number 9 3 7 5. I want purple fries at zone \"A\" and dark green rectangular candy at zone \"D\".",
     items: [
       { zone: "A", foodItemId: "fries", colour: "purple" },
-      { zone: "D", foodItemId: "rectangular_candy", colour: "green" },
+      { zone: "D", foodItemId: "rectangular_candy", colour: "dark green" },
     ],
   },
   {
@@ -209,9 +209,9 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 1,
     spokenText:
-      "Order number 7 9 5 3. I want green dumpling at zone \"A\" and purple cheese at zone \"C\".",
+      "Order number 7 9 5 3. I want dark green dumpling at zone \"A\" and purple cheese at zone \"C\".",
     items: [
-      { zone: "A", foodItemId: "dumpling", colour: "green" },
+      { zone: "A", foodItemId: "dumpling", colour: "dark green" },
       { zone: "C", foodItemId: "cheese", colour: "purple" },
     ],
   },
@@ -254,10 +254,10 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 5,
     spokenText:
-      "Order number 2 7 6 9. I want yellow mushroom at zone \"C\", green star candy at zone \"B\", purple lettuce at zone \"A\", and red mushroom at zone \"D\".",
+      "Order number 2 7 6 9. I want yellow mushroom at zone \"C\", light green star candy at zone \"B\", purple lettuce at zone \"A\", and red mushroom at zone \"D\".",
     items: [
       { zone: "C", foodItemId: "mushroom", colour: "yellow" },
-      { zone: "B", foodItemId: "star_candy", colour: "green" },
+      { zone: "B", foodItemId: "star_candy", colour: "light green" },
       { zone: "A", foodItemId: "lettuce", colour: "purple" },
       { zone: "D", foodItemId: "mushroom", colour: "red" },
     ],
@@ -289,11 +289,11 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 2,
     spokenText:
-      "Order number 1 6 9 5. I want purple dumpling at zone \"A\", orange heart candy at zone \"B\", and green tomato at zone \"C\".",
+      "Order number 1 6 9 5. I want purple dumpling at zone \"A\", orange heart candy at zone \"B\", and light green tomato at zone \"C\".",
     items: [
       { zone: "A", foodItemId: "dumpling", colour: "purple" },
       { zone: "B", foodItemId: "heart_candy", colour: "orange" },
-      { zone: "C", foodItemId: "tomato", colour: "green" },
+      { zone: "C", foodItemId: "tomato", colour: "light green" },
     ],
   },
   {
@@ -323,9 +323,9 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 5,
     spokenText:
-      "Order number 9 5 1 7. I want green cauliflower at zone \"A\" and brown spiral candy at zone \"C\".",
+      "Order number 9 5 1 7. I want dark green cauliflower at zone \"A\" and brown spiral candy at zone \"C\".",
     items: [
-      { zone: "A", foodItemId: "cauliflower", colour: "green" },
+      { zone: "A", foodItemId: "cauliflower", colour: "dark green" },
       { zone: "C", foodItemId: "spiral_candy", colour: "brown" },
     ],
   },
@@ -369,9 +369,9 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 3,
     spokenText:
-      "Order number 8 6 3 5. I want green mushroom at zone \"B\", yellow rectangular candy at zone \"C\", and pink cheese at zone \"D\".",
+      "Order number 8 6 3 5. I want light green mushroom at zone \"B\", yellow rectangular candy at zone \"C\", and pink cheese at zone \"D\".",
     items: [
-      { zone: "B", foodItemId: "mushroom", colour: "green" },
+      { zone: "B", foodItemId: "mushroom", colour: "light green" },
       { zone: "C", foodItemId: "rectangular_candy", colour: "yellow" },
       { zone: "D", foodItemId: "cheese", colour: "pink" },
     ],
@@ -403,10 +403,10 @@ export const EASY_ORDERS: OrderTemplate[] = [
     difficulty: "easy",
     customerSlot: 6,
     spokenText:
-      "Order number 5 6 0 1. I want purple carrot at zone \"D\" and green flower candy at zone \"A\".",
+      "Order number 5 6 0 1. I want purple carrot at zone \"D\" and dark green flower candy at zone \"A\".",
     items: [
       { zone: "D", foodItemId: "carrot", colour: "purple" },
-      { zone: "A", foodItemId: "flower_candy", colour: "green" },
+      { zone: "A", foodItemId: "flower_candy", colour: "dark green" },
     ],
   },
 ];
