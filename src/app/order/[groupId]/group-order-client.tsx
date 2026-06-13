@@ -30,15 +30,20 @@ type OrderAudioManifest = {
 };
 
 const preloadedOrderAudio = new Map<string, HTMLAudioElement>();
-const preloadOrderAudioRequests = new Map<string, Promise<void>>();
+const preloadedOrderAudioUrls = new Map<string, string>();
+const preloadOrderAudioRequests = new Map<string, Promise<HTMLAudioElement>>();
 
-function preloadOrderAudioPath(audioPath?: string) {
-  if (!audioPath || preloadedOrderAudio.has(audioPath)) return;
-
-  const audio = new Audio(audioPath);
+function createOrderAudioElement(audioPath: string, src: string) {
+  const audio = new Audio(src);
   audio.preload = "auto";
   audio.load();
   preloadedOrderAudio.set(audioPath, audio);
+  return audio;
+}
+
+function preloadOrderAudioPath(audioPath?: string) {
+  if (!audioPath) return null;
+  if (preloadedOrderAudio.has(audioPath)) return preloadedOrderAudio.get(audioPath) ?? null;
 
   const link = document.createElement("link");
   link.rel = "preload";
@@ -46,14 +51,31 @@ function preloadOrderAudioPath(audioPath?: string) {
   link.href = audioPath;
   document.head.appendChild(link);
 
-  if (!preloadOrderAudioRequests.has(audioPath)) {
-    preloadOrderAudioRequests.set(
+  if (preloadedOrderAudioUrls.has(audioPath)) {
+    return createOrderAudioElement(
       audioPath,
-      fetch(audioPath, { cache: "force-cache" })
-        .then(() => undefined)
-        .catch(() => undefined),
+      preloadedOrderAudioUrls.get(audioPath) ?? audioPath,
     );
   }
+
+  const fallbackAudio = createOrderAudioElement(audioPath, audioPath);
+
+  if (!preloadOrderAudioRequests.has(audioPath)) {
+    const preloadRequest = fetch(audioPath, { cache: "force-cache" })
+      .then(async (response) => {
+        if (!response.ok) return fallbackAudio;
+
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        preloadedOrderAudioUrls.set(audioPath, objectUrl);
+        return createOrderAudioElement(audioPath, objectUrl);
+      })
+      .catch(() => fallbackAudio);
+
+    preloadOrderAudioRequests.set(audioPath, preloadRequest);
+  }
+
+  return fallbackAudio;
 }
 
 async function preloadOrderAudioManifest() {
@@ -80,7 +102,10 @@ async function playOrderAudio(audioPath?: string, spokenText?: string) {
   stopKokoroSpeech();
 
   if (audioPath) {
-    const player = preloadedOrderAudio.get(audioPath) ?? new Audio(audioPath);
+    const preloadedPlayer =
+      (await preloadOrderAudioRequests.get(audioPath)) ??
+      preloadOrderAudioPath(audioPath);
+    const player = preloadedPlayer ?? new Audio(audioPath);
     player.preload = "auto";
 
     const playedPublicAudio = await new Promise<boolean>((resolve) => {

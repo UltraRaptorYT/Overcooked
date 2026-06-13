@@ -62,12 +62,8 @@ const {
 const KEYPAD_VALUES = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
 const STARTABLE_ORDER_STATUSES = new Set(["assigned", "assembling"]);
 
-function formatDecimalSeconds(seconds: number) {
-  const sign = seconds < 0 ? "-" : "";
-  const absoluteSeconds = Math.abs(seconds);
-  const mins = Math.floor(absoluteSeconds / 60);
-  const secs = absoluteSeconds % 60;
-  return `${sign}${mins}:${secs.toFixed(2).padStart(5, "0")}`;
+function formatWholeSeconds(seconds: number) {
+  return `${Math.max(0, Math.floor(seconds))}s`;
 }
 
 function isOrderStartable(order: CookingLookupData | null) {
@@ -797,7 +793,7 @@ export function CookingStationClient({ groupId, groupName }: Props) {
                       Cooking
                     </p>
                     <p className="mt-1 text-[clamp(4rem,18vw,7rem)] font-black tabular-nums sm:mt-4">
-                      {formatDecimalSeconds(elapsedSeconds)}
+                      {formatWholeSeconds(elapsedSeconds)}
                     </p>
                   </div>
                 </>

@@ -59,12 +59,24 @@ function assertNoError<T>(
 async function seedFoodItems() {
   console.log("Seeding food items...");
 
+  const { data: existingFoodItems, error: existingFoodItemsError } =
+    await supabase.from(TABLES.foodItems).select("id, image_url");
+
+  assertNoError(
+    { data: existingFoodItems ?? [], error: existingFoodItemsError },
+    "load existing food item images",
+  );
+
+  const existingImageUrlById = new Map(
+    (existingFoodItems ?? []).map((item) => [item.id, item.image_url]),
+  );
+
   const rows = FOOD_ITEMS.map((item) => ({
     id: item.id,
     name: item.name,
     requires_cooking: item.requiresCooking,
     cook_time_seconds: item.cookTimeSeconds,
-    image_url: item.imageUrl ?? null,
+    image_url: item.imageUrl ?? existingImageUrlById.get(item.id) ?? null,
   }));
 
   const result = await supabase

@@ -117,6 +117,60 @@ export async function GET() {
     return NextResponse.json({ error: sessionsError.message }, { status: 500 });
   }
 
+  const { data: allGameGroupOrders, error: allGameGroupOrdersError } =
+    await supabase
+      .from(T.groupOrders)
+      .select("id")
+      .eq("game_id", game.id);
+
+  if (allGameGroupOrdersError) {
+    return NextResponse.json(
+      { error: allGameGroupOrdersError.message },
+      { status: 500 },
+    );
+  }
+
+  const allGameGroupOrderIds = (allGameGroupOrders ?? []).map(
+    (order) => order.id,
+  );
+
+  const { data: servedOrders, error: servedOrdersError } = await supabase
+    .from(T.servedOrders)
+    .select("served_by_group_id, decision")
+    .in(
+      "group_order_id",
+      allGameGroupOrderIds.length > 0
+        ? allGameGroupOrderIds
+        : ["00000000-0000-0000-0000-000000000000"],
+    );
+
+  if (servedOrdersError) {
+    return NextResponse.json(
+      { error: servedOrdersError.message },
+      { status: 500 },
+    );
+  }
+
+  const orderStatsByGroupId = new Map<
+    string,
+    { order_success: number; order_failure: number }
+  >();
+
+  for (const servedOrder of servedOrders ?? []) {
+    const stats = orderStatsByGroupId.get(servedOrder.served_by_group_id) ?? {
+      order_success: 0,
+      order_failure: 0,
+    };
+
+    if (servedOrder.decision === "approved") {
+      stats.order_success += 1;
+    } else {
+      stats.order_failure += 1;
+    }
+
+    orderStatsByGroupId.set(servedOrder.served_by_group_id, stats);
+  }
+
   const templateMap = new Map(
     (templates ?? []).map((template) => [template.id, template]),
   );
@@ -163,6 +217,10 @@ export async function GET() {
     currentRound,
     groups: (groups ?? []).map((group) => ({
       ...group,
+      order_success:
+        orderStatsByGroupId.get(group.id)?.order_success ?? 0,
+      order_failure:
+        orderStatsByGroupId.get(group.id)?.order_failure ?? 0,
       orders: ordersByGroupId.get(group.id) ?? [],
     })),
   });

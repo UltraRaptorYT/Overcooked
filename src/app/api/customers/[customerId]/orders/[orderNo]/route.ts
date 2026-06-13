@@ -41,6 +41,10 @@ async function getCustomer(customerId: string) {
     .single();
 }
 
+function normalizeItemName(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 export async function GET(_request: Request, context: LookupContext) {
   const { customerId, orderNo } = await context.params;
 
@@ -142,6 +146,23 @@ export async function GET(_request: Request, context: LookupContext) {
   }
 
   const foodMap = new Map((foodItems ?? []).map((food) => [food.id, food]));
+  const { data: itemImages, error: itemImagesError } = await supabase
+    .from(T.items)
+    .select("name, image_url");
+
+  if (itemImagesError) {
+    return NextResponse.json(
+      { error: itemImagesError.message },
+      { status: 500 },
+    );
+  }
+
+  const itemImageUrlMap = new Map(
+    (itemImages ?? []).map((item) => [
+      normalizeItemName(item.name),
+      item.image_url,
+    ]),
+  );
 
   const items = (rawItems ?? []).map((item) => {
     const food = foodMap.get(item.food_item_id);
@@ -156,7 +177,10 @@ export async function GET(_request: Request, context: LookupContext) {
       sequence: item.sequence,
       requiresCooking: food?.requires_cooking ?? false,
       cookTimeSeconds: food?.cook_time_seconds ?? 0,
-      imageUrl: food?.image_url ?? null,
+      imageUrl:
+        itemImageUrlMap.get(normalizeItemName(food?.name ?? "")) ??
+        food?.image_url ??
+        null,
     };
   });
 

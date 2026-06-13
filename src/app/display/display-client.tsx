@@ -44,6 +44,8 @@ type DisplayGroup = {
   display_order: number;
   score: number;
   red_tokens: number;
+  order_success: number;
+  order_failure: number;
   orders: DisplayOrder[];
 };
 
@@ -105,13 +107,20 @@ const BACKGROUND_MUSIC_SRC = "/background-music.mp3";
 const DISPLAY_SFX = {
   countdownBeep: "/countdown-beep.mp3",
   orderCompleteDing: "/order-complete-ding.mp3",
+  orderWrong: "/order-wrong.mp3",
   rushHour: "/rush-hour.mp3",
   sizzleLoop: "/sizzle-loop.mp3",
   timesUpBell: "/times-up-bell.mp3",
 } as const;
 const DISPLAY_SFX_NAMES = Object.keys(DISPLAY_SFX) as DisplaySfxName[];
+const DEFAULT_DISPLAY_SFX_VOLUME = 0.85;
 
 type DisplaySfxName = keyof typeof DISPLAY_SFX;
+const DISPLAY_SFX_VOLUME: Partial<Record<DisplaySfxName, number>> = {
+  orderWrong: 0.45,
+  rushHour: 0.95,
+  sizzleLoop: 0.32,
+};
 
 function formatSeconds(seconds: number) {
   const safeSeconds = Math.max(0, Math.floor(seconds));
@@ -127,6 +136,17 @@ function setAudioPitchPreservation(
   audio.preservesPitch = preservePitch;
   audio.mozPreservesPitch = preservePitch;
   audio.webkitPreservesPitch = preservePitch;
+}
+
+function getRushHourMusicRate(
+  rushHourActive: boolean,
+  matchRemaining: number,
+  rushHourSeconds: number,
+) {
+  if (!rushHourActive || rushHourSeconds <= 0) return 1;
+
+  const rushProgress = 1 - Math.max(0, matchRemaining) / rushHourSeconds;
+  return 1.25 + Math.min(1, Math.max(0, rushProgress)) * 0.45;
 }
 
 function getSessionTiming(session: CookingSession | null, now: number) {
@@ -254,6 +274,11 @@ export function DisplayClient() {
     currentRound?.status === "playing" &&
     matchRemaining > 0 &&
     matchRemaining <= rushHourSeconds;
+  const backgroundMusicRate = getRushHourMusicRate(
+    rushHourActive,
+    matchRemaining,
+    rushHourSeconds,
+  );
   const activeCookingCount = useMemo(
     () =>
       (displayState?.groups ?? []).reduce(
@@ -326,8 +351,7 @@ export function DisplayClient() {
 
     const audio = new Audio(DISPLAY_SFX[name]);
     audio.preload = "auto";
-    audio.volume =
-      name === "sizzleLoop" ? 0.32 : name === "rushHour" ? 0.95 : 0.85;
+    audio.volume = DISPLAY_SFX_VOLUME[name] ?? DEFAULT_DISPLAY_SFX_VOLUME;
     audio.load();
     sfxAudioRef.current[name] = audio;
     return audio;
@@ -400,7 +424,7 @@ export function DisplayClient() {
     try {
       setMusicErrorMessage(null);
       setAudioPitchPreservation(audio, true);
-      audio.playbackRate = 1;
+      audio.playbackRate = backgroundMusicRate;
       await audio.play();
       setMusicPlaying(true);
     } catch {
@@ -452,6 +476,7 @@ export function DisplayClient() {
 
     for (const count of [3, 2, 1]) {
       setStartCountdown(count);
+      playSfx("countdownBeep");
       await new Promise((resolve) => window.setTimeout(resolve, 1000));
     }
 
@@ -569,7 +594,7 @@ export function DisplayClient() {
     if (
       currentRound?.status !== "playing" ||
       matchRemaining <= 0 ||
-      matchRemaining > 10
+      matchRemaining > 30
     ) {
       previousCountdownSecondRef.current = null;
       return;
@@ -593,6 +618,13 @@ export function DisplayClient() {
     matchRemaining,
     updateSizzleLoop,
   ]);
+
+  useEffect(() => {
+    const audio = backgroundMusicRef.current;
+    if (!audio) return;
+
+    audio.playbackRate = backgroundMusicRate;
+  }, [backgroundMusicRate]);
 
   useEffect(() => {
     const channel = supabase
@@ -632,6 +664,8 @@ export function DisplayClient() {
           const decision = (servedOrder as { decision?: string }).decision;
           if (decision === "approved") {
             playSfx("orderCompleteDing");
+          } else if (decision === "rejected" || decision === "wrong_customer") {
+            playSfx("orderWrong");
           }
           void loadDisplay();
         },
@@ -806,6 +840,25 @@ export function DisplayClient() {
                   <div className="text-right">
                     <p className="text-xs font-bold text-slate-500">Score</p>
                     <p className="text-2xl font-black">{group.score}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-emerald-50 p-3 ring-1 ring-emerald-100">
+                    <p className="text-xs font-bold uppercase text-emerald-700">
+                      Order Success
+                    </p>
+                    <p className="text-2xl font-black text-emerald-950">
+                      {group.order_success}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-red-50 p-3 ring-1 ring-red-100">
+                    <p className="text-xs font-bold uppercase text-red-700">
+                      Order Failure
+                    </p>
+                    <p className="text-2xl font-black text-red-950">
+                      {group.order_failure}
+                    </p>
                   </div>
                 </div>
 

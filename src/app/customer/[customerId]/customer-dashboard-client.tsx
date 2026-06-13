@@ -540,13 +540,26 @@ export function CustomerDashboardClient({
                           key={item.id}
                           className="rounded-2xl bg-white p-3 shadow-sm"
                         >
-                          <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-emerald-100 bg-emerald-50">
+                          <div
+                            data-food-image-frame
+                            className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-emerald-100 bg-emerald-50"
+                          >
                             {item.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={item.imageUrl}
                                 alt={item.foodName}
                                 className="h-full w-full object-contain p-2"
+                                onError={(event) => {
+                                  event.currentTarget.style.display = "none";
+                                  const frame =
+                                    event.currentTarget.closest(
+                                      "[data-food-image-frame]",
+                                    );
+                                  frame
+                                    ?.querySelector("[data-image-error-message]")
+                                    ?.classList.remove("hidden");
+                                }}
                                 style={{
                                   filter: getFoodImageFilter(item.colour),
                                 }}
@@ -554,6 +567,14 @@ export function CustomerDashboardClient({
                             ) : (
                               <span className="text-2xl font-black text-emerald-700">
                                 {initialsFromFoodName(item.foodName)}
+                              </span>
+                            )}
+                            {item.imageUrl && (
+                              <span
+                                data-image-error-message
+                                className="hidden text-center text-xs font-black text-red-700"
+                              >
+                                Image failed
                               </span>
                             )}
                           </div>
