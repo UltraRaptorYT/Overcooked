@@ -238,7 +238,7 @@ export function CustomerDashboardClient({
     }
   }
 
-  async function handleLookup(nextOrderNo = orderNo) {
+  async function handleLookup(nextOrderNo = orderNo, groupOrderId?: string) {
     const cleanedOrderNo = nextOrderNo.trim();
 
     if (!cleanedOrderNo) {
@@ -253,8 +253,15 @@ export function CustomerDashboardClient({
     setLookupData(null);
 
     try {
+      const params = new URLSearchParams();
+      if (groupOrderId) {
+        params.set("groupOrderId", groupOrderId);
+      }
+
       const response = await fetch(
-        `/api/customers/${customerId}/orders/${cleanedOrderNo}`,
+        `/api/customers/${customerId}/orders/${cleanedOrderNo}${
+          params.size > 0 ? `?${params.toString()}` : ""
+        }`,
       );
       const data = await response.json();
 
@@ -431,7 +438,9 @@ export function CustomerDashboardClient({
                   <button
                     key={order.groupOrderId}
                     type="button"
-                    onClick={() => handleLookup(order.orderNo)}
+                    onClick={() =>
+                      handleLookup(order.orderNo, order.groupOrderId)
+                    }
                     disabled={isLoading}
                     className={`rounded-2xl border p-4 text-left transition disabled:opacity-50 ${
                       orderNo === order.orderNo

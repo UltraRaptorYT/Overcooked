@@ -45,10 +45,13 @@ function normalizeItemName(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export async function GET(_request: Request, context: LookupContext) {
+export async function GET(request: Request, context: LookupContext) {
   const { customerId, orderNo } = await context.params;
 
   const cleanedOrderNo = orderNo.trim();
+  const requestedGroupOrderId = new URL(request.url).searchParams.get(
+    "groupOrderId",
+  );
 
   if (!customerId || !cleanedOrderNo) {
     return NextResponse.json(
@@ -80,13 +83,21 @@ export async function GET(_request: Request, context: LookupContext) {
     );
   }
 
-  const { data: groupOrder, error: groupOrderError } = await supabase
+  let groupOrderQuery = supabase
     .from(T.groupOrders)
     .select(
       "id, game_id, round_id, group_id, status, assigned_at, served_at, completed_at, completion_seconds",
     )
     .eq("game_id", customer.game_id)
-    .eq("order_template_id", orderTemplate.id)
+    .eq("order_template_id", orderTemplate.id);
+
+  if (requestedGroupOrderId) {
+    groupOrderQuery = groupOrderQuery.eq("id", requestedGroupOrderId);
+  }
+
+  const { data: groupOrder, error: groupOrderError } = await groupOrderQuery
+    .order("assigned_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (groupOrderError) {

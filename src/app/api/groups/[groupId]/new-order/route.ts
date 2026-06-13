@@ -67,7 +67,8 @@ export async function POST(_request: Request, context: RouteContext) {
   const { data: usedOrders, error: usedOrdersError } = await supabase
     .from(T.groupOrders)
     .select("order_template_id")
-    .eq("game_id", group.game_id);
+    .eq("game_id", group.game_id)
+    .eq("group_id", groupId);
 
   if (usedOrdersError) {
     return NextResponse.json(

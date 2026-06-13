@@ -190,7 +190,7 @@ create table if not exists overcooked_26_group_orders (
   last_replayed_at timestamptz null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (game_id, order_template_id)
+  unique (game_id, group_id, order_template_id)
 );
 create index if not exists group_orders_game_round_idx on overcooked_26_group_orders(game_id, round_id);
 create index if not exists group_orders_group_status_idx on overcooked_26_group_orders(group_id, status);

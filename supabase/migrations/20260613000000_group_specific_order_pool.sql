@@ -1,0 +1,7 @@
+drop index if exists overcooked_26_group_orders_game_order_template_unique;
+
+alter table overcooked_26_group_orders
+drop constraint if exists overcooked_26_group_orders_game_id_order_template_id_key;
+
+create unique index if not exists overcooked_26_group_orders_game_group_order_template_unique
+on overcooked_26_group_orders(game_id, group_id, order_template_id);
