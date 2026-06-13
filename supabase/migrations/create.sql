@@ -195,6 +195,9 @@ create table if not exists overcooked_26_group_orders (
 create index if not exists group_orders_game_round_idx on overcooked_26_group_orders(game_id, round_id);
 create index if not exists group_orders_group_status_idx on overcooked_26_group_orders(group_id, status);
 create index if not exists group_orders_order_template_id_idx on overcooked_26_group_orders(order_template_id);
+create unique index if not exists group_orders_active_game_order_template_unique
+on overcooked_26_group_orders(game_id, order_template_id)
+where status in ('assigned', 'cooking', 'cooked', 'assembling', 'served');
 create table if not exists overcooked_26_cooking_sessions (
   id uuid primary key default gen_random_uuid(),
   group_order_id uuid not null references overcooked_26_group_orders(id) on delete cascade,

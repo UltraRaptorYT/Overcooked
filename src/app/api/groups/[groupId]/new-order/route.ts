@@ -9,6 +9,14 @@ type RouteContext = {
   }>;
 };
 
+const ACTIVE_LOCK_STATUSES = [
+  "assigned",
+  "cooking",
+  "cooked",
+  "assembling",
+  "served",
+] as const;
+
 function pickRandom<TItem>(items: TItem[]) {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -81,6 +89,23 @@ export async function POST(_request: Request, context: RouteContext) {
     (usedOrders ?? []).map((row) => row.order_template_id as string),
   );
 
+  const { data: lockedOrders, error: lockedOrdersError } = await supabase
+    .from(T.groupOrders)
+    .select("order_template_id")
+    .eq("game_id", group.game_id)
+    .in("status", [...ACTIVE_LOCK_STATUSES]);
+
+  if (lockedOrdersError) {
+    return NextResponse.json(
+      { error: lockedOrdersError.message },
+      { status: 500 },
+    );
+  }
+
+  const lockedOrderTemplateIds = new Set(
+    (lockedOrders ?? []).map((row) => row.order_template_id as string),
+  );
+
   const { data: candidateOrders, error: candidateOrdersError } = await supabase
     .from(T.orderTemplates)
     .select(
@@ -97,7 +122,9 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   const availableOrders = (candidateOrders ?? []).filter(
-    (order) => !usedOrderTemplateIds.has(order.id),
+    (order) =>
+      !usedOrderTemplateIds.has(order.id) &&
+      !lockedOrderTemplateIds.has(order.id),
   );
 
   if (availableOrders.length === 0) {
