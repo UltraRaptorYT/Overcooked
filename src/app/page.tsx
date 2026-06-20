@@ -1,493 +1,136 @@
-"use client";
-
-import { useState, useEffect, useCallback } from "react";
-import { GROUPS, COOLDOWN_GAP, type GroupConfig } from "@/config/app";
+import Link from "next/link";
 import {
-  playKokoroSpeech,
-  preloadKokoroSpeech,
-  stopKokoroSpeech,
-} from "@/lib/kokoro-tts";
+  ChefHat,
+  ClipboardList,
+  CookingPot,
+  Monitor,
+  ShoppingBag,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
-// ─── Types ──────────────────────────────────────────────────────
-interface AssignedOrder {
-  orderNumber: number;
-  text: string;
-  globalSeq: number;
-  groupId: number;
-}
-
-interface HistoryEntry extends AssignedOrder {
-  id: string;
-  createdAt: string;
-}
-
-// ─── Color mappings for group cards ─────────────────────────────
-const GROUP_COLORS: Record<
-  string,
-  { bg: string; ring: string; text: string; muted: string; accent: string }
-> = {
-  "bg-rose-500": {
-    bg: "rgba(244,63,94,0.08)",
-    ring: "rgba(244,63,94,0.25)",
-    text: "#fb7185",
-    muted: "rgba(244,63,94,0.5)",
-    accent: "#f43f5e",
-  },
-  "bg-blue-500": {
-    bg: "rgba(59,130,246,0.08)",
-    ring: "rgba(59,130,246,0.25)",
-    text: "#60a5fa",
-    muted: "rgba(59,130,246,0.5)",
-    accent: "#3b82f6",
-  },
-  "bg-emerald-500": {
-    bg: "rgba(16,185,129,0.08)",
-    ring: "rgba(16,185,129,0.25)",
-    text: "#34d399",
-    muted: "rgba(16,185,129,0.5)",
-    accent: "#10b981",
-  },
-  "bg-amber-500": {
-    bg: "rgba(245,158,11,0.08)",
-    ring: "rgba(245,158,11,0.25)",
-    text: "#fbbf24",
-    muted: "rgba(245,158,11,0.5)",
-    accent: "#f59e0b",
-  },
-  "bg-violet-500": {
-    bg: "rgba(139,92,246,0.08)",
-    ring: "rgba(139,92,246,0.25)",
-    text: "#a78bfa",
-    muted: "rgba(139,92,246,0.5)",
-    accent: "#8b5cf6",
-  },
+type AppLink = {
+  title: string;
+  description: string;
+  href: string;
+  icon: LucideIcon;
+  color: string;
+  background: string;
+  border: string;
 };
 
-const fallbackColor = {
-  bg: "rgba(232,87,42,0.08)",
-  ring: "rgba(232,87,42,0.25)",
-  text: "#e8572a",
-  muted: "rgba(232,87,42,0.5)",
-  accent: "#e8572a",
-};
+const APP_LINKS: AppLink[] = [
+  {
+    title: "Order",
+    description: "Choose a group and place the next food order.",
+    href: "/order",
+    icon: ClipboardList,
+    color: "text-orange-700",
+    background: "bg-orange-100",
+    border: "group-hover:border-orange-300",
+  },
+  {
+    title: "Customer",
+    description: "Open a customer station to receive and judge orders.",
+    href: "/customer",
+    icon: Users,
+    color: "text-emerald-700",
+    background: "bg-emerald-100",
+    border: "group-hover:border-emerald-300",
+  },
+  {
+    title: "Cooking",
+    description: "Start the kitchen timer and manage active dishes.",
+    href: "/cooking",
+    icon: CookingPot,
+    color: "text-sky-700",
+    background: "bg-sky-100",
+    border: "group-hover:border-sky-300",
+  },
+  {
+    title: "Display",
+    description: "Show the live game status on the main screen.",
+    href: "/display",
+    icon: Monitor,
+    color: "text-violet-700",
+    background: "bg-violet-100",
+    border: "group-hover:border-violet-300",
+  },
+];
 
-function getColor(colorClass: string) {
-  return GROUP_COLORS[colorClass] ?? fallbackColor;
-}
-
-// ─── Mini Waveform ──────────────────────────────────────────────
-function MiniWave({ active, color }: { active: boolean; color: string }) {
+export default function HomePage() {
   return (
-    <div className="flex items-center gap-[2px] h-5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          className="w-[3px] rounded-full transition-all duration-200"
-          style={{
-            height: active ? `${40 + Math.sin(i * 1.2) * 60}%` : "20%",
-            background: active ? color : "var(--border)",
-            animationName: active ? "wave" : "none",
-            animationDuration: active ? `${0.5 + i * 0.1}s` : "0s",
-            animationTimingFunction: "ease-in-out",
-            animationIterationCount: active ? "infinite" : "0",
-            animationDelay: `${i * 0.08}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
+    <main className="relative min-h-screen overflow-hidden bg-stone-50 px-6 py-12 sm:py-20">
+      <div
+        aria-hidden="true"
+        className="absolute -left-24 -top-24 h-80 w-80 rounded-full bg-orange-200/50 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-amber-100/70 blur-3xl"
+      />
 
-// ─── Group Card ─────────────────────────────────────────────────
-function GroupCard({
-  group,
-  currentOrder,
-  isSpeaking,
-  isLoading,
-  onCallOrder,
-}: {
-  group: GroupConfig;
-  currentOrder: AssignedOrder | null;
-  isSpeaking: boolean;
-  isLoading: boolean;
-  onCallOrder: () => void;
-}) {
-  const c = getColor(group.color);
-
-  return (
-    <div
-      className="relative rounded-2xl p-5 transition-all duration-300"
-      style={{
-        background: "var(--surface)",
-        border: `1px solid ${currentOrder ? c.ring : "var(--border)"}`,
-        boxShadow: isSpeaking ? `0 0 40px ${c.ring}` : "none",
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2.5">
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{ background: c.accent }}
-          />
-          <span className="text-sm font-medium" style={{ color: c.text }}>
-            {group.name}
-          </span>
-        </div>
-        <MiniWave active={isSpeaking} color={c.accent} />
-      </div>
-
-      {/* Current Order Display */}
-      <div className="mb-5 min-h-[72px] flex flex-col justify-center">
-        {currentOrder ? (
-          <div className="animate-fade-in">
-            <div
-              className="mono text-4xl font-medium tracking-wide"
-              style={{ color: "var(--text)" }}
-            >
-              #{currentOrder.orderNumber}
-            </div>
-            <div
-              className="text-xs mt-1.5 truncate"
-              style={{ color: "var(--muted)" }}
-            >
-              Seq #{currentOrder.globalSeq} · {currentOrder.text}
-            </div>
+      <div className="relative mx-auto max-w-5xl">
+        <header className="mx-auto max-w-2xl text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-600 text-white shadow-lg shadow-orange-600/20">
+            <ChefHat className="h-9 w-9" aria-hidden="true" />
           </div>
-        ) : (
-          <div className="text-sm" style={{ color: "var(--muted)" }}>
-            No order assigned yet
-          </div>
-        )}
-      </div>
-
-      {/* Call Button */}
-      <button
-        onClick={onCallOrder}
-        disabled={isLoading || isSpeaking}
-        className="w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-        style={{
-          background: isLoading ? c.bg : c.accent,
-          color: isLoading ? c.text : "white",
-          boxShadow:
-            !isLoading && !isSpeaking ? `0 4px 20px ${c.ring}` : "none",
-        }}
-      >
-        {isLoading ? (
-          <span className="flex items-center justify-center gap-2">
-            <svg
-              className="animate-spin h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <circle
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeDasharray="32"
-                strokeLinecap="round"
-              />
-            </svg>
-            Assigning…
-          </span>
-        ) : isSpeaking ? (
-          "Speaking…"
-        ) : (
-          <span className="flex items-center justify-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 3v18M8 7v10M4 10v4M16 7v10M20 10v4"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-            Call Order
-          </span>
-        )}
-      </button>
-
-      {/* Pulse ring when speaking */}
-      {isSpeaking && (
-        <div
-          className="absolute inset-0 rounded-2xl pointer-events-none"
-          style={{
-            border: `2px solid ${c.accent}`,
-            animation: "pulse-ring 1.5s ease-out infinite",
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// ─── Main Page ──────────────────────────────────────────────────
-export default function KioskPage() {
-  const [currentOrders, setCurrentOrders] = useState<
-    Record<number, AssignedOrder>
-  >({});
-  const [loadingGroups, setLoadingGroups] = useState<Set<number>>(new Set());
-  const [speakingGroup, setSpeakingGroup] = useState<number | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [resetting, setResetting] = useState(false);
-
-  useEffect(() => {
-    loadHistory();
-    void preloadKokoroSpeech({ speed: 0.8 });
-
-    return () => {
-      stopKokoroSpeech();
-    };
-  }, []);
-
-  const loadHistory = async () => {
-    try {
-      const res = await fetch("/api/history");
-      const json = await res.json();
-      if (json.history) setHistory(json.history);
-    } catch {
-      // Silently fail — history is non-critical
-    }
-  };
-
-  const speak = useCallback((text: string, groupId: number): Promise<void> => {
-    return playKokoroSpeech(text, {
-      speed: 0.8,
-      volume: 1,
-      onStart: () => setSpeakingGroup(groupId),
-      onEnd: () => setSpeakingGroup(null),
-    });
-  }, []);
-
-  const callOrder = useCallback(
-    async (groupId: number) => {
-      setError(null);
-
-      setLoadingGroups((prev) => new Set(prev).add(groupId));
-
-      try {
-        const res = await fetch("/api/assign", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ groupId }),
-        });
-
-        const json = await res.json();
-
-        if (!res.ok) {
-          setError(json.error ?? "Failed to assign order.");
-          return;
-        }
-
-        const order: AssignedOrder = json;
-
-        setCurrentOrders((prev) => ({ ...prev, [groupId]: order }));
-        setLoadingGroups((prev) => {
-          const next = new Set(prev);
-          next.delete(groupId);
-          return next;
-        });
-
-        // Speak the order
-        await speak(
-          `Order No ${[...String(order.orderNumber)].join(" ")} - ${order.text}`,
-          groupId,
-        );
-
-        // Refresh history
-        loadHistory();
-      } catch {
-        setError("Network error — check your connection.");
-      } finally {
-        setLoadingGroups((prev) => {
-          const next = new Set(prev);
-          next.delete(groupId);
-          return next;
-        });
-      }
-    },
-    [speak],
-  );
-
-  const resetAll = async () => {
-    if (!confirm("Reset all assignments? This clears the entire history."))
-      return;
-
-    setResetting(true);
-    try {
-      await fetch("/api/reset", { method: "POST" });
-      setCurrentOrders({});
-      setHistory([]);
-      setError(null);
-    } catch {
-      setError("Failed to reset.");
-    } finally {
-      setResetting(false);
-    }
-  };
-
-  // Grid columns based on group count
-  const gridCols =
-    GROUPS.length <= 3
-      ? "grid-cols-1 sm:grid-cols-3"
-      : GROUPS.length <= 4
-        ? "grid-cols-2 lg:grid-cols-4"
-        : "grid-cols-2 lg:grid-cols-3 xl:grid-cols-5";
-
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        {/* Header */}
-        <header className="flex items-center justify-between mb-8">
-          <div>
-            <h1
-              className="text-2xl font-semibold tracking-tight"
-              style={{ color: "var(--text)" }}
-            >
-              Order Kiosk
-            </h1>
-            <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-              {GROUPS.length} groups · {COOLDOWN_GAP}-order cooldown gap
-            </p>
-          </div>
-          <button
-            onClick={resetAll}
-            disabled={resetting}
-            className="px-4 py-2 rounded-lg text-xs font-medium transition-all hover:bg-red-500/10"
-            style={{
-              color: "#ef4444",
-              border: "1px solid rgba(239,68,68,0.2)",
-            }}
-          >
-            {resetting ? "Resetting…" : "Reset All"}
-          </button>
+          <p className="mt-6 text-sm font-semibold uppercase tracking-[0.25em] text-orange-700">
+            Kitchen control
+          </p>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight text-stone-950 sm:text-5xl">
+            Overcooked
+          </h1>
+          <p className="mt-4 text-base leading-7 text-stone-600 sm:text-lg">
+            Choose the station you want to open.
+          </p>
         </header>
 
-        {/* Error banner */}
-        {error && (
-          <div
-            className="mb-6 px-4 py-3 rounded-xl text-sm animate-fade-in"
-            style={{
-              background: "rgba(239,68,68,0.08)",
-              border: "1px solid rgba(239,68,68,0.2)",
-              color: "#fca5a5",
-            }}
-          >
-            {error}
-          </div>
-        )}
+        <section
+          aria-label="Overcooked stations"
+          className="mt-12 grid gap-5 sm:grid-cols-2"
+        >
+          {APP_LINKS.map((item) => {
+            const Icon = item.icon;
 
-        {/* Group Grid */}
-        <div className={`grid ${gridCols} gap-4`}>
-          {GROUPS.map((group) => (
-            <GroupCard
-              key={group.id}
-              group={group}
-              currentOrder={currentOrders[group.id] ?? null}
-              isSpeaking={speakingGroup === group.id}
-              isLoading={loadingGroups.has(group.id)}
-              onCallOrder={() => callOrder(group.id)}
-            />
-          ))}
-        </div>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`group flex min-h-48 flex-col rounded-3xl border border-stone-200 bg-white p-7 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-stone-900/5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-200 ${item.border}`}
+              >
+                <div
+                  className={`flex h-12 w-12 items-center justify-center rounded-2xl ${item.background} ${item.color}`}
+                >
+                  <Icon className="h-6 w-6" aria-hidden="true" />
+                </div>
 
-        {/* History */}
-        {history.length > 0 && (
-          <section className="mt-10">
-            <h2
-              className="text-[11px] font-semibold tracking-widest uppercase mb-4"
-              style={{ color: "var(--muted)" }}
-            >
-              Assignment History
-            </h2>
-            <div
-              className="rounded-xl overflow-hidden"
-              style={{ border: "1px solid var(--border)" }}
-            >
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ background: "var(--elevated)" }}>
-                    <th
-                      className="px-4 py-2.5 text-left font-medium text-xs"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      Seq
-                    </th>
-                    <th
-                      className="px-4 py-2.5 text-left font-medium text-xs"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      Order
-                    </th>
-                    <th
-                      className="px-4 py-2.5 text-left font-medium text-xs"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      Group
-                    </th>
-                    <th
-                      className="px-4 py-2.5 text-right font-medium text-xs"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      Time
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.slice(0, 20).map((entry, i) => {
-                    const group = GROUPS.find((g) => g.id === entry.groupId);
-                    const c = group ? getColor(group.color) : fallbackColor;
-                    return (
-                      <tr
-                        key={entry.id}
-                        style={{
-                          background:
-                            i % 2 === 0 ? "var(--surface)" : "var(--bg)",
-                          borderTop: "1px solid var(--border)",
-                        }}
-                      >
-                        <td
-                          className="px-4 py-2.5 mono text-xs"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          #{entry.globalSeq}
-                        </td>
-                        <td
-                          className="px-4 py-2.5 mono font-medium"
-                          style={{ color: "var(--text)" }}
-                        >
-                          #{entry.orderNumber}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span
-                            className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-md"
-                            style={{ background: c.bg, color: c.text }}
-                          >
-                            <span
-                              className="w-1.5 h-1.5 rounded-full"
-                              style={{ background: c.accent }}
-                            />
-                            {group?.name ?? `Group ${entry.groupId}`}
-                          </span>
-                        </td>
-                        <td
-                          className="px-4 py-2.5 text-right text-xs"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          {new Date(entry.createdAt).toLocaleTimeString()}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
+                <div className="mt-7 flex items-end justify-between gap-6">
+                  <div>
+                    <h2 className="text-2xl font-semibold text-stone-950">
+                      {item.title}
+                    </h2>
+                    <p className="mt-2 max-w-sm text-sm leading-6 text-stone-600">
+                      {item.description}
+                    </p>
+                  </div>
+                  <span
+                    aria-hidden="true"
+                    className={`mb-1 shrink-0 text-2xl transition-transform duration-200 group-hover:translate-x-1 ${item.color}`}
+                  >
+                    →
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </section>
+
+        <footer className="mt-10 flex items-center justify-center gap-2 text-sm text-stone-500">
+          <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+          <span>Select a station to get started</span>
+        </footer>
       </div>
-    </div>
+    </main>
   );
 }
